@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block title %}Invoices{% endblock %}
+{% block page_title %}Invoices{% endblock %}
+{% block page_sub %}Generate, preview, download, and send learner invoices{% endblock %}
+{% block topbar_actions %}
+<button class="btn-lcca btn-lcca-gold" onclick="openGenerateInvoice()">
+  <i class="bi bi-file-earmark-plus"></i> Generate Invoice
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="lcca-panel">
+  <div class="panel-body">
+    <div class="table-toolbar">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="text" id="searchInput" placeholder="Search by learner name or invoice number...">
+      </div>
+      <select class="form-select form-select-sm" id="statusFilter" style="width:auto;">
+        <option value="">All Statuses</option>
+        <option value="Generated">Generated</option>
+        <option value="Sent">Sent</option>
+      </select>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead>
+          <tr>
+            <th>Invoice #</th>
+            <th>Learner</th>
+            <th>Issue Date</th>
+            <th>Due Date</th>
+            <th>Charges</th>
+            <th>Outstanding</th>
+            <th>Status</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="invoicesTableBody">
+          <tr><td colspan="8"><div class="skeleton" style="height:40px;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="invoicesEmptyState" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Generate Invoice Modal -->
+<div class="modal fade" id="generateModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">Generate Invoice</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="generateForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Invoice For</label>
+            <select class="form-select" id="genScope">
+              <option value="learner">Learner</option>
+              <option value="parent">Parent (aggregate linked learners)</option>
+            </select>
+          </div>
+          <div class="mb-3" id="genLearnerWrap">
+            <label class="form-label">Learner</label>
+            <select class="form-select" id="genLearner"></select>
+          </div>
+          <div class="mb-3" id="genParentWrap" style="display:none;">
+            <label class="form-label">Parent</label>
+            <select class="form-select" id="genParent"></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Fee Structure</label>
+            <select class="form-select" id="genFeeStructure"></select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label">Due Date</label>
+            <input type="date" class="form-control" id="genDueDate" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-navy" id="generateSubmitBtn">Generate Invoice</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Send Email Modal -->
+<div class="modal fade" id="sendEmailModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">Send Invoice (Simulated)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="sendEmailForm">
+        <div class="modal-body">
+          <input type="hidden" id="sendInvoiceId">
+          <p class="cell-muted">This will simulate sending the invoice by email and log it under Email Logs. No real email is sent in this prototype.</p>
+          <label class="form-label">Recipient Email (optional override)</label>
+          <input type="email" class="form-control" id="sendRecipientEmail" placeholder="Defaults to parent's email on file">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-gold"><i class="bi bi-envelope-check"></i> Send</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteInvoiceModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content lcca-modal">
+      <div class="modal-body text-center py-4">
+        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size:2rem;"></i>
+        <h5 class="mt-3">Delete this invoice?</h5>
+        <p class="cell-muted">The associated charges will be reversed from the learner's balance. This cannot be undone.</p>
+        <div class="d-flex gap-2 justify-content-center mt-3">
+          <button class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn-lcca btn-lcca-danger-outline" id="confirmDeleteInvoiceBtn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allInvoices = [];
+let invoiceToDelete = null;
+const generateModal = new bootstrap.Modal(document.getElementById("generateModal"));
+const sendEmailModal = new bootstrap.Modal(document.getElementById("sendEmailModal"));
+const deleteInvoiceModal = new bootstrap.Modal(document.getElementById("deleteInvoiceModal"));
+
+function renderInvoicesTable(invoices) {
+  const tbody = document.getElementById("invoicesTableBody");
+  const emptyState = document.getElementById("invoicesEmptyState");
+
+  if (!invoices.length) {
+    tbody.innerHTML = "";
+    emptyState.style.display = "block";
+    emptyState.innerHTML = `<div class="empty-state"><i class="bi bi-file-earmark-text"></i><h4>No invoices yet</h4><p>Generate an invoice for a learner using an existing fee structure.</p></div>`;
+    return;
+  }
+  emptyState.style.display = "none";
+
+  tbody.innerHTML = invoices.map(inv => `
+    <tr>
+      <td class="cell-mono">${LCCA.escapeHtml(inv.invoice_number)}</td>
+      <td class="cell-strong">${LCCA.escapeHtml(inv.parent_name || inv.learner_name || "Unknown")} <span class="cell-muted">(${LCCA.escapeHtml(inv.learner_code || "")})</span></td>
+      <td class="cell-muted">${LCCA.dateShort(inv.issue_date)}</td>
+      <td class="cell-muted">${LCCA.dateShort(inv.due_date)}</td>
+      <td>${LCCA.currency(inv.current_charges)}</td>
+      <td class="cell-strong">${LCCA.currency(inv.outstanding_balance)}</td>
+      <td><span class="badge-status ${inv.status.toLowerCase()}">${inv.status}</span></td>
+      <td style="text-align:right; white-space:nowrap;">
+        <a class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Preview" href="/api/invoices/${inv.id}/preview" target="_blank"><i class="bi bi-eye"></i></a>
+        <a class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Download PDF" href="/api/invoices/${inv.id}/pdf"><i class="bi bi-download"></i></a>
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Send Email" onclick="openSendEmail(${inv.id})"><i class="bi bi-envelope"></i></button>
+        <button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm btn-icon-only" title="Delete" onclick="askDeleteInvoice(${inv.id})"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function loadInvoices() {
+  try {
+    allInvoices = await LCCA.api.get("/invoices");
+    applyFilters();
+  } catch (err) {
+    LCCA.toast("Failed to load invoices: " + err.message, "error");
+  }
+}
+
+function applyFilters() {
+  const search = document.getElementById("searchInput").value.trim().toLowerCase();
+  const status = document.getElementById("statusFilter").value;
+  let filtered = allInvoices;
+  if (search) {
+    filtered = filtered.filter(i =>
+      (i.learner_name || "").toLowerCase().includes(search) ||
+      (i.invoice_number || "").toLowerCase().includes(search)
+    );
+  }
+  if (status) filtered = filtered.filter(i => i.status === status);
+  renderInvoicesTable(filtered);
+}
+document.getElementById("searchInput").addEventListener("input", LCCA.debounce(applyFilters, 250));
+document.getElementById("statusFilter").addEventListener("change", applyFilters);
+
+async function openGenerateInvoice() {
+  document.getElementById("generateForm").reset();
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 30);
+  document.getElementById("genDueDate").valueAsDate = dueDate;
+
+  try {
+    const [learners, parents, fees] = await Promise.all([
+      LCCA.api.get("/learners"),
+      LCCA.api.get("/parents"),
+      LCCA.api.get("/fee-structures"),
+    ]);
+    document.getElementById("genLearner").innerHTML = learners.map(l =>
+      `<option value="${l.id}">${LCCA.escapeHtml(l.full_name)} (${LCCA.escapeHtml(l.learner_code)}) &mdash; ${LCCA.escapeHtml(l.grade)}</option>`
+    ).join("");
+    document.getElementById("genParent").innerHTML = parents.map(p =>
+      `<option value="${p.id}">${LCCA.escapeHtml(p.full_name)}</option>`
+    ).join("");
+    document.getElementById("genFeeStructure").innerHTML = fees.map(f =>
+      `<option value="${f.id}">${LCCA.escapeHtml(f.name)} &mdash; ${LCCA.escapeHtml(f.grade)} (${LCCA.currency(f.total)})</option>`
+    ).join("");
+    generateModal.show();
+  } catch (err) {
+    LCCA.toast("Failed to load data: " + err.message, "error");
+  }
+}
+
+document.getElementById("genScope").addEventListener("change", () => {
+  const scope = document.getElementById("genScope").value;
+  document.getElementById("genLearnerWrap").style.display = scope === "learner" ? "block" : "none";
+  document.getElementById("genParentWrap").style.display = scope === "parent" ? "block" : "none";
+});
+
+document.getElementById("generateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const scope = document.getElementById("genScope").value;
+  const payload = {
+    learner_id: scope === "learner" ? parseInt(document.getElementById("genLearner").value) : null,
+    parent_id: scope === "parent" ? parseInt(document.getElementById("genParent").value) : null,
+    fee_structure_id: parseInt(document.getElementById("genFeeStructure").value),
+    due_date: document.getElementById("genDueDate").value,
+  };
+  const btn = document.getElementById("generateSubmitBtn");
+  btn.disabled = true;
+  try {
+    const invoice = await LCCA.api.post("/invoices/generate", payload);
+    LCCA.toast(`Invoice ${invoice.invoice_number} generated successfully.`);
+    generateModal.hide();
+    loadInvoices();
+  } catch (err) {
+    LCCA.toast("Failed to generate invoice: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function openSendEmail(invoiceId) {
+  document.getElementById("sendInvoiceId").value = invoiceId;
+  document.getElementById("sendRecipientEmail").value = "";
+  sendEmailModal.show();
+}
+
+document.getElementById("sendEmailForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const invoiceId = document.getElementById("sendInvoiceId").value;
+  const email = document.getElementById("sendRecipientEmail").value.trim();
+  try {
+    const log = await LCCA.api.post(`/invoices/${invoiceId}/send`, email ? { recipient_email: email } : {});
+    LCCA.toast(`Invoice email simulated, sent to ${log.recipient_email}`);
+    sendEmailModal.hide();
+    loadInvoices();
+  } catch (err) {
+    LCCA.toast("Failed to send invoice: " + err.message, "error");
+  }
+});
+
+function askDeleteInvoice(id) {
+  invoiceToDelete = id;
+  deleteInvoiceModal.show();
+}
+
+document.getElementById("confirmDeleteInvoiceBtn").addEventListener("click", async () => {
+  if (!invoiceToDelete) return;
+  try {
+    await LCCA.api.del(`/invoices/${invoiceToDelete}`);
+    LCCA.toast("Invoice deleted; balance reversed.");
+    deleteInvoiceModal.hide();
+    loadInvoices();
+  } catch (err) {
+    LCCA.toast("Failed to delete invoice: " + err.message, "error");
+  }
+});
+
+loadInvoices();
+</script>
+{% endblock %}

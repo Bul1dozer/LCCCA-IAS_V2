@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}System Settings{% endblock %}
+{% block page_sub %}Configure email delivery, SMS, two-factor authentication, and notification preferences{% endblock %}
+
+{% block content %}
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tabSmtp">
+    <i class="bi bi-envelope-fill me-1"></i>Email (SMTP)</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabSms">
+    <i class="bi bi-phone-fill me-1"></i>SMS</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab2fa">
+    <i class="bi bi-shield-lock-fill me-1"></i>Two-Factor Auth</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabNotifLogs">
+    <i class="bi bi-bell-fill me-1"></i>Notification Log</a></li>
+</ul>
+
+<div class="tab-content">
+
+<!-- SMTP -->
+<div class="tab-pane fade show active" id="tabSmtp">
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="lcca-panel">
+        <div class="panel-header"><h3>SMTP Configuration</h3>
+          <div id="smtpStatusBadge"></div>
+        </div>
+        <form id="smtpForm" class="panel-body">
+          <div class="row g-3 mb-3">
+            <div class="col-8"><label class="form-label">SMTP Host</label>
+              <input type="text" class="form-control" id="smtpHost" placeholder="smtp.gmail.com">
+            </div>
+            <div class="col-4"><label class="form-label">Port</label>
+              <input type="number" class="form-control" id="smtpPort" value="587">
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-6"><label class="form-label">Username / Email</label>
+              <input type="text" class="form-control" id="smtpUsername" placeholder="accounts@yourschool.com">
+            </div>
+            <div class="col-6"><label class="form-label">App Password</label>
+              <input type="password" class="form-control" id="smtpPassword" placeholder="Leave blank to keep existing">
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-6"><label class="form-label">From Address</label>
+              <input type="email" class="form-control" id="smtpFromAddress" placeholder="accounts@yourschool.com">
+            </div>
+            <div class="col-6"><label class="form-label">From Name</label>
+              <input type="text" class="form-control" id="smtpFromName" placeholder="LCCA Accounts Office">
+            </div>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="smtpTls" checked>
+            <label class="form-check-label" for="smtpTls">Use STARTTLS (port 587) / SSL (port 465)</label>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn-lcca btn-lcca-navy"><i class="bi bi-save"></i> Save SMTP Settings</button>
+            <button type="button" class="btn-lcca btn-lcca-outline" onclick="testSmtp()"><i class="bi bi-send"></i> Send Test Email</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="lcca-panel mb-3">
+        <div class="panel-header"><h3>Quick Setup Guides</h3></div>
+        <div class="panel-body">
+          <div class="mb-3">
+            <div class="cell-strong mb-1"><i class="bi bi-google me-1"></i>Gmail / Google Workspace</div>
+            <div class="cell-muted" style="font-size:0.82rem;">Host: <code>smtp.gmail.com</code>, Port: <code>587</code><br>
+            Enable 2FA on Google account → create an App Password in Google Account → Security → App Passwords</div>
+          </div>
+          <hr style="border-color:var(--border-soft);">
+          <div>
+            <div class="cell-strong mb-1"><i class="bi bi-microsoft me-1"></i>Microsoft 365</div>
+            <div class="cell-muted" style="font-size:0.82rem;">Host: <code>smtp.office365.com</code>, Port: <code>587</code><br>
+            Use your M365 email and password. Ensure SMTP AUTH is enabled in Exchange Admin Center.</div>
+          </div>
+        </div>
+      </div>
+      <div class="lcca-panel">
+        <div class="panel-header"><h3>Test Result</h3></div>
+        <div class="panel-body" id="smtpTestResult">
+          <div class="cell-muted">Click "Send Test Email" to verify SMTP connectivity.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SMS -->
+<div class="tab-pane fade" id="tabSms">
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="lcca-panel">
+        <div class="panel-header"><h3>SMS Provider Configuration</h3>
+          <div id="smsStatusBadge"></div>
+        </div>
+        <form id="smsForm" class="panel-body">
+          <div class="mb-3"><label class="form-label">Provider</label>
+            <select class="form-select" id="smsProvider">
+              <option value="africastalking">Africa's Talking</option>
+              <option value="bulksms">BulkSMS</option>
+              <option value="twilio">Twilio</option>
+            </select>
+          </div>
+          <div class="mb-3"><label class="form-label">API Key</label>
+            <input type="password" class="form-control" id="smsApiKey" placeholder="Your provider API key">
+          </div>
+          <div class="mb-3"><label class="form-label">API Secret / Username</label>
+            <input type="password" class="form-control" id="smsApiSecret" placeholder="Secret or username">
+          </div>
+          <div class="mb-3"><label class="form-label">Sender ID</label>
+            <input type="text" class="form-control" id="smsSenderId" placeholder="LCCA" maxlength="11">
+          </div>
+          <button type="submit" class="btn-lcca btn-lcca-navy"><i class="bi bi-save"></i> Save SMS Settings</button>
+        </form>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="lcca-panel">
+        <div class="panel-header"><h3>Provider Notes</h3></div>
+        <div class="panel-body">
+          <div class="mb-3">
+            <div class="cell-strong mb-1">Africa's Talking</div>
+            <div class="cell-muted" style="font-size:0.82rem;">Popular for Southern Africa. API Key = your AT API key. Secret = your AT username. Register at africastalking.com. Free sandbox available.</div>
+          </div>
+          <hr style="border-color:var(--border-soft);">
+          <div class="mb-3">
+            <div class="cell-strong mb-1">BulkSMS</div>
+            <div class="cell-muted" style="font-size:0.82rem;">API Key = username, Secret = password from BulkSMS dashboard (bulksms.com).</div>
+          </div>
+          <hr style="border-color:var(--border-soft);">
+          <div>
+            <div class="cell-strong mb-1">WhatsApp Business</div>
+            <div class="cell-muted" style="font-size:0.82rem;">WhatsApp integration via Twilio WhatsApp API or Meta Cloud API is planned for the next release. Current notifications use SMS and Email.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 2FA -->
+<div class="tab-pane fade" id="tab2fa">
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="lcca-panel mb-3">
+        <div class="panel-header"><h3>Change Password</h3></div>
+        <div class="panel-body">
+          <form id="passwordChangeForm">
+            <div class="mb-3"><label class="form-label">Current Password</label><input type="password" class="form-control" id="currentPassword" required></div>
+            <div class="mb-3"><label class="form-label">New Password</label><input type="password" class="form-control" id="newPassword" required></div>
+            <div class="mb-3"><label class="form-label">Confirm New Password</label><input type="password" class="form-control" id="confirmPassword" required></div>
+            <button type="submit" class="btn-lcca btn-lcca-navy">Update Password</button>
+          </form>
+        </div>
+      </div>
+      <div class="lcca-panel">
+        <div class="panel-header"><h3>Two-Factor Authentication</h3></div>
+        <div class="panel-body">
+          <div id="twoFaStatus" class="mb-3"></div>
+          <button class="btn-lcca btn-lcca-navy me-2" onclick="setup2fa()"><i class="bi bi-qr-code"></i> Set Up 2FA</button>
+          <button class="btn-lcca btn-lcca-danger-outline" onclick="disable2fa()"><i class="bi bi-shield-x"></i> Disable 2FA</button>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="lcca-panel" id="qrPanel" style="display:none;">
+        <div class="panel-header"><h3>Scan QR Code</h3></div>
+        <div class="panel-body">
+          <p class="cell-muted">Scan this QR code with Google Authenticator, Authy, or any TOTP app, then enter the 6-digit code to activate 2FA.</p>
+          <div class="text-center mb-3"><img id="qrCodeImg" src="" alt="QR Code" style="max-width:200px;border:2px solid var(--border);border-radius:8px;"></div>
+          <div class="cell-muted mb-1" style="font-size:0.8rem;">Manual entry key:</div>
+          <div class="cell-mono mb-3" id="totpSecret" style="font-size:0.9rem;word-break:break-all;background:var(--surface-sunken);padding:8px;border-radius:6px;"></div>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control" id="totpCode" placeholder="Enter 6-digit code" maxlength="6" style="max-width:180px;">
+            <button class="btn-lcca btn-lcca-gold" onclick="verify2fa()"><i class="bi bi-shield-check"></i> Verify &amp; Enable</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Notification Log -->
+<div class="tab-pane fade" id="tabNotifLogs">
+  <div class="lcca-panel">
+    <div class="panel-header">
+      <h3>Notification Delivery Log</h3>
+      <div class="d-flex gap-2">
+        <select class="form-select form-select-sm" id="notifChannel" style="width:auto;">
+          <option value="">All Channels</option>
+          <option value="email">Email</option>
+          <option value="sms">SMS</option>
+          <option value="whatsapp">WhatsApp</option>
+        </select>
+        <select class="form-select form-select-sm" id="notifStatus" style="width:auto;">
+          <option value="">All Statuses</option>
+          <option value="sent">Sent</option>
+          <option value="simulated">Simulated</option>
+          <option value="failed">Failed</option>
+          <option value="pending">Pending</option>
+        </select>
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="loadNotifLogs()"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="table-responsive">
+        <table class="table-lcca">
+          <thead><tr>
+            <th>When</th><th>Channel</th><th>Recipient</th><th>Subject / Message</th>
+            <th>Status</th><th>Retries</th>
+          </tr></thead>
+          <tbody id="notifBody">
+            <tr><td colspan="6"><div class="skeleton" style="height:36px;"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="notifEmpty" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end tab-content -->
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const CHAN_ICON = { email:"envelope-fill", sms:"phone-fill", whatsapp:"whatsapp" };
+const NOTIF_COLORS = { sent:"active", simulated:"info", failed:"suspended", pending:"generated", delivered:"active" };
+
+// ---- SMTP ----
+async function loadSmtp() {
+  try {
+    const cfg = await LCCA.api.get("/settings/smtp");
+    const badge = document.getElementById("smtpStatusBadge");
+    if (cfg.configured) {
+      badge.innerHTML = `<span class="badge-status active"><i class="bi bi-check-circle-fill me-1"></i>Configured</span>`;
+      document.getElementById("smtpHost").value = cfg.host || "";
+      document.getElementById("smtpPort").value = cfg.port || 587;
+      document.getElementById("smtpUsername").value = cfg.username || "";
+      document.getElementById("smtpFromAddress").value = cfg.from_address || "";
+      document.getElementById("smtpFromName").value = cfg.from_name || "";
+      document.getElementById("smtpTls").checked = cfg.use_tls !== false;
+    } else {
+      badge.innerHTML = `<span class="badge-status generated">Not configured</span>`;
+    }
+  } catch (err) { /* silent */ }
+}
+
+document.getElementById("smtpForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = {
+    host: document.getElementById("smtpHost").value.trim(),
+    port: parseInt(document.getElementById("smtpPort").value),
+    username: document.getElementById("smtpUsername").value.trim(),
+    from_address: document.getElementById("smtpFromAddress").value.trim(),
+    from_name: document.getElementById("smtpFromName").value.trim(),
+    use_tls: document.getElementById("smtpTls").checked,
+  };
+  const pwd = document.getElementById("smtpPassword").value;
+  if (pwd) payload.password = pwd;
+  try {
+    await LCCA.api.post("/settings/smtp", payload);
+    LCCA.toast("SMTP settings saved.");
+    loadSmtp();
+  } catch (err) { LCCA.toast("Failed to save SMTP: " + err.message, "error"); }
+});
+
+async function testSmtp() {
+  const resultEl = document.getElementById("smtpTestResult");
+  resultEl.innerHTML = `<div class="d-flex align-items-center gap-2"><span class="spinner-border spinner-border-sm"></span> Sending test email...</div>`;
+  try {
+    const r = await LCCA.api.post("/settings/smtp/test", {});
+    resultEl.innerHTML = `<div style="color:var(--success);"><i class="bi bi-check-circle-fill me-1"></i>Test email sent to <strong>${LCCA.escapeHtml(r.sent_to)}</strong></div>
+      <div class="cell-muted mt-1" style="font-size:0.8rem;">Message ID: ${LCCA.escapeHtml(r.message_id||"—")}</div>`;
+    LCCA.toast("Test email sent successfully!");
+  } catch (err) {
+    resultEl.innerHTML = `<div style="color:var(--danger);"><i class="bi bi-x-circle-fill me-1"></i>${LCCA.escapeHtml(err.message)}</div>`;
+    LCCA.toast("SMTP test failed: " + err.message, "error");
+  }
+}
+
+// ---- SMS ----
+async function loadSms() {
+  try {
+    const cfg = await LCCA.api.get("/settings/sms");
+    const badge = document.getElementById("smsStatusBadge");
+    if (cfg.configured) {
+      badge.innerHTML = `<span class="badge-status active"><i class="bi bi-check-circle-fill me-1"></i>Configured</span>`;
+      document.getElementById("smsProvider").value = cfg.provider || "africastalking";
+      document.getElementById("smsSenderId").value = cfg.sender_id || "";
+    } else {
+      badge.innerHTML = `<span class="badge-status generated">Not configured</span>`;
+    }
+  } catch (err) { /* silent */ }
+}
+
+document.getElementById("smsForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = {
+    provider: document.getElementById("smsProvider").value,
+    sender_id: document.getElementById("smsSenderId").value.trim() || null,
+    api_key: document.getElementById("smsApiKey").value || null,
+    api_secret: document.getElementById("smsApiSecret").value || null,
+  };
+  try {
+    await LCCA.api.post("/settings/sms", payload);
+    LCCA.toast("SMS settings saved.");
+    loadSms();
+  } catch (err) { LCCA.toast("Failed to save SMS: " + err.message, "error"); }
+});
+
+// ---- 2FA ----
+document.getElementById("passwordChangeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const newPassword = document.getElementById("newPassword").value;
+  const confirmPassword = document.getElementById("confirmPassword").value;
+  if (newPassword !== confirmPassword) {
+    LCCA.toast("New passwords do not match.", "error");
+    return;
+  }
+  try {
+    await LCCA.api.post("/auth/password-change", {
+      current_password: document.getElementById("currentPassword").value,
+      new_password: newPassword,
+    });
+    LCCA.toast("Password updated successfully.");
+    document.getElementById("passwordChangeForm").reset();
+  } catch (err) {
+    LCCA.toast("Failed to update password: " + err.message, "error");
+  }
+});
+
+async function load2faStatus() {
+  try {
+    const me = await LCCA.api.get("/auth/me");
+    const el = document.getElementById("twoFaStatus");
+    // me doesn't return totp_enabled currently, so we check via session
+    el.innerHTML = `<div class="cell-muted">Two-factor authentication adds a second verification step using an authenticator app (Google Authenticator, Authy, etc.) to protect your administrator account.</div>`;
+  } catch (err) { /* silent */ }
+}
+
+async function setup2fa() {
+  try {
+    const data = await LCCA.api.post("/settings/2fa/setup", {});
+    document.getElementById("qrCodeImg").src = data.qr_code;
+    document.getElementById("totpSecret").textContent = data.secret;
+    document.getElementById("qrPanel").style.display = "block";
+  } catch (err) { LCCA.toast("Failed to set up 2FA: " + err.message, "error"); }
+}
+
+async function verify2fa() {
+  const code = document.getElementById("totpCode").value.trim();
+  if (!code) { LCCA.toast("Enter the 6-digit code first.", "error"); return; }
+  try {
+    const r = await LCCA.api.post("/settings/2fa/verify", { code });
+    LCCA.toast(r.message || "2FA enabled.");
+    document.getElementById("qrPanel").style.display = "none";
+    document.getElementById("twoFaStatus").innerHTML = `<span class="badge-status active"><i class="bi bi-shield-check-fill me-1"></i>2FA is ENABLED</span>`;
+  } catch (err) { LCCA.toast("Verification failed: " + err.message, "error"); }
+}
+
+async function disable2fa() {
+  if (!confirm("Disable two-factor authentication? This will reduce account security.")) return;
+  try {
+    const r = await LCCA.api.post("/settings/2fa/disable", {});
+    LCCA.toast(r.message || "2FA disabled.");
+    document.getElementById("twoFaStatus").innerHTML = `<span class="badge-status generated">2FA is disabled</span>`;
+    document.getElementById("qrPanel").style.display = "none";
+  } catch (err) { LCCA.toast("Failed to disable 2FA: " + err.message, "error"); }
+}
+
+// ---- Notification Logs ----
+async function loadNotifLogs() {
+  const channel = document.getElementById("notifChannel").value;
+  const status  = document.getElementById("notifStatus").value;
+  let path = "/settings/notification-logs?limit=100";
+  if (channel) path += `&channel=${channel}`;
+  if (status)  path += `&status=${status}`;
+  try {
+    const logs = await LCCA.api.get(path);
+    const tbody = document.getElementById("notifBody");
+    const empty = document.getElementById("notifEmpty");
+    if (!logs.length) {
+      tbody.innerHTML = "";
+      empty.style.display = "block";
+      empty.innerHTML = `<div class="empty-state"><i class="bi bi-bell-slash"></i><h4>No notifications logged</h4><p>Notifications will appear here once invoices are sent.</p></div>`;
+      return;
+    }
+    empty.style.display = "none";
+    tbody.innerHTML = logs.map(l => `
+      <tr>
+        <td class="cell-muted" style="white-space:nowrap;">${LCCA.dateTimeShort(l.created_at)}</td>
+        <td><span class="badge-status info"><i class="bi bi-${CHAN_ICON[l.channel]||"bell"} me-1"></i>${l.channel}</span></td>
+        <td class="cell-muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${LCCA.escapeHtml(l.recipient)}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${LCCA.escapeHtml(l.subject||l.body_preview||"—")}</td>
+        <td><span class="badge-status ${NOTIF_COLORS[l.status]||"generated"}">${l.status}</span>
+          ${l.error_message?`<div class="cell-muted" style="font-size:0.72rem;">${LCCA.escapeHtml(l.error_message.slice(0,80))}</div>`:""}</td>
+        <td class="cell-muted">${l.retry_count}</td>
+      </tr>
+    `).join("");
+  } catch (err) { LCCA.toast("Failed to load notification log: " + err.message, "error"); }
+}
+
+// Tab lazy-load
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+  tab.addEventListener("shown.bs.tab", e => {
+    const t = e.target.getAttribute("href");
+    if (t === "#tabSms") loadSms();
+    if (t === "#tab2fa") load2faStatus();
+    if (t === "#tabNotifLogs") loadNotifLogs();
+  });
+});
+
+loadSmtp();
+</script>
+{% endblock %}

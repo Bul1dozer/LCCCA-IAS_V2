@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}Learners{% endblock %}
+{% block page_title %}Learners{% endblock %}
+{% block page_sub %}Manage learner enrollment records{% endblock %}
+{% block topbar_actions %}
+<button class="btn-lcca btn-lcca-gold" data-bs-toggle="modal" data-bs-target="#learnerModal" onclick="openCreateLearner()">
+  <i class="bi bi-plus-lg"></i> Add Learner
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="lcca-panel">
+  <div class="panel-body">
+    <div class="table-toolbar">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="text" id="searchInput" placeholder="Search by name, ID, grade, or class...">
+      </div>
+      <div class="d-flex gap-2">
+        <select class="form-select form-select-sm" id="statusFilter" style="width:auto;">
+          <option value="">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+          <option value="Graduated">Graduated</option>
+          <option value="Suspended">Suspended</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead>
+          <tr>
+            <th>Learner ID</th>
+            <th>Full Name</th>
+            <th>Grade</th>
+            <th>Class</th>
+            <th>Admission Date</th>
+            <th>Status</th>
+            <th>Balance</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="learnersTableBody">
+          <tr><td colspan="8"><div class="skeleton" style="height:40px;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="learnersEmptyState" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Add / Edit Learner Modal -->
+<div class="modal fade" id="learnerModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title" id="learnerModalTitle">Add Learner</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="learnerForm">
+        <div class="modal-body">
+          <input type="hidden" id="learnerId">
+          <div class="mb-3">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" id="fullName" required>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Grade</label>
+              <input type="text" class="form-control" id="grade" placeholder="e.g. Grade 5" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Class</label>
+              <input type="text" class="form-control" id="className" placeholder="e.g. 5A" required>
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Date of Admission</label>
+              <input type="date" class="form-control" id="dateOfAdmission" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="status">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Graduated">Graduated</option>
+                <option value="Suspended">Suspended</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Physical Address</label>
+            <textarea class="form-control" id="physicalAddress" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-navy" id="learnerSubmitBtn">Save Learner</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Learner Profile Modal -->
+<div class="modal fade" id="profileModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">Learner Profile</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="profileModalBody">
+        <div class="skeleton" style="height:120px;"></div>
+      </div>
+      <div class="modal-footer">
+        <a href="#" id="profileStatementLink" class="btn-lcca btn-lcca-outline" target="_blank"><i class="bi bi-file-text"></i> Account Statement</a>
+        <button type="button" class="btn-lcca btn-lcca-navy" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteLearnerModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content lcca-modal">
+      <div class="modal-body text-center py-4">
+        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size:2rem;"></i>
+        <h5 class="mt-3">Delete this learner?</h5>
+        <p class="cell-muted">This will also remove related parent links, payments, and invoices. This cannot be undone.</p>
+        <div class="d-flex gap-2 justify-content-center mt-3">
+          <button class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn-lcca btn-lcca-danger-outline" id="confirmDeleteLearnerBtn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allLearners = [];
+let learnerToDelete = null;
+const learnerModal = new bootstrap.Modal(document.getElementById("learnerModal"));
+const profileModal = new bootstrap.Modal(document.getElementById("profileModal"));
+const deleteLearnerModal = new bootstrap.Modal(document.getElementById("deleteLearnerModal"));
+
+function statusBadge(status) {
+  return `<span class="badge-status ${status.toLowerCase()}">${status}</span>`;
+}
+
+function balancePill(balance) {
+  const cls = balance > 0 ? "positive" : "zero";
+  const icon = balance > 0 ? "bi-exclamation-circle" : "bi-check-circle";
+  return `<span class="balance-pill ${cls}"><i class="bi ${icon}"></i> ${LCCA.currency(balance)}</span>`;
+}
+
+function renderLearnersTable(learners) {
+  const tbody = document.getElementById("learnersTableBody");
+  const emptyState = document.getElementById("learnersEmptyState");
+
+  if (!learners.length) {
+    tbody.innerHTML = "";
+    emptyState.style.display = "block";
+    emptyState.innerHTML = `<div class="empty-state"><i class="bi bi-mortarboard"></i><h4>No learners found</h4><p>Try adjusting your search or add a new learner to get started.</p></div>`;
+    return;
+  }
+  emptyState.style.display = "none";
+
+  tbody.innerHTML = learners.map(l => `
+    <tr>
+      <td class="cell-mono">${LCCA.escapeHtml(l.learner_id || l.learner_code)}</td>
+      <td><a href="#" class="cell-strong" onclick="viewProfile(${l.id}); return false;">${LCCA.escapeHtml(l.full_name)}</a></td>
+      <td>${LCCA.escapeHtml(l.grade)}</td>
+      <td>${LCCA.escapeHtml(l.class_name)}</td>
+      <td class="cell-muted">${LCCA.dateShort(l.date_of_admission)}</td>
+      <td>${statusBadge(l.status)}</td>
+      <td>${balancePill(l.balance)}</td>
+      <td style="text-align:right; white-space:nowrap;">
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="View Profile" onclick="viewProfile(${l.id})"><i class="bi bi-eye"></i></button>
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Edit" onclick="openEditLearner(${l.id})"><i class="bi bi-pencil"></i></button>
+        <button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm btn-icon-only" title="Delete" onclick="askDeleteLearner(${l.id})"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function loadLearners() {
+  const search = document.getElementById("searchInput").value.trim();
+  const status = document.getElementById("statusFilter").value;
+  let path = "/learners?";
+  const params = [];
+  if (search) params.push("search=" + encodeURIComponent(search));
+  if (status) params.push("status=" + encodeURIComponent(status));
+  path += params.join("&");
+
+  try {
+    allLearners = await LCCA.api.get(path);
+    renderLearnersTable(allLearners);
+  } catch (err) {
+    LCCA.toast("Failed to load learners: " + err.message, "error");
+  }
+}
+
+document.getElementById("searchInput").addEventListener("input", LCCA.debounce(loadLearners, 300));
+document.getElementById("statusFilter").addEventListener("change", loadLearners);
+
+function openCreateLearner() {
+  document.getElementById("learnerForm").reset();
+  document.getElementById("learnerId").value = "";
+  document.getElementById("learnerModalTitle").textContent = "Add Learner";
+  document.getElementById("dateOfAdmission").valueAsDate = new Date();
+  document.getElementById("physicalAddress").value = "";
+}
+
+async function openEditLearner(id) {
+  const learner = allLearners.find(l => l.id === id) || await LCCA.api.get(`/learners/${id}`);
+  document.getElementById("learnerId").value = learner.id;
+  document.getElementById("fullName").value = learner.full_name;
+  document.getElementById("grade").value = learner.grade;
+  document.getElementById("className").value = learner.class_name;
+  document.getElementById("dateOfAdmission").value = learner.date_of_admission;
+  document.getElementById("status").value = learner.status;
+  document.getElementById("physicalAddress").value = learner.physical_address || "";
+  document.getElementById("learnerModalTitle").textContent = "Edit Learner";
+  learnerModal.show();
+}
+
+document.getElementById("learnerForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("learnerId").value;
+  const payload = {
+    full_name: document.getElementById("fullName").value.trim(),
+    grade: document.getElementById("grade").value.trim(),
+    class_name: document.getElementById("className").value.trim(),
+    date_of_admission: document.getElementById("dateOfAdmission").value,
+    status: document.getElementById("status").value,
+    physical_address: document.getElementById("physicalAddress").value.trim() || null,
+  };
+
+  const btn = document.getElementById("learnerSubmitBtn");
+  btn.disabled = true;
+
+  try {
+    if (id) {
+      await LCCA.api.put(`/learners/${id}`, payload);
+      LCCA.toast("Learner updated successfully.");
+    } else {
+      await LCCA.api.post("/learners", payload);
+      LCCA.toast("Learner added successfully.");
+    }
+    learnerModal.hide();
+    loadLearners();
+  } catch (err) {
+    LCCA.toast("Failed to save learner: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function askDeleteLearner(id) {
+  learnerToDelete = id;
+  deleteLearnerModal.show();
+}
+
+document.getElementById("confirmDeleteLearnerBtn").addEventListener("click", async () => {
+  if (!learnerToDelete) return;
+  try {
+    await LCCA.api.del(`/learners/${learnerToDelete}`);
+    LCCA.toast("Learner deleted.");
+    deleteLearnerModal.hide();
+    loadLearners();
+  } catch (err) {
+    LCCA.toast("Failed to delete learner: " + err.message, "error");
+  }
+});
+
+async function viewProfile(id) {
+  profileModal.show();
+  document.getElementById("profileStatementLink").href = `/api/reports/learner-statement/${id}`;
+  try {
+    const learner = await LCCA.api.get(`/learners/${id}`);
+    const parentsHtml = learner.parents.length
+      ? learner.parents.map(p => `
+          <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border-soft);">
+            <div>
+              <div class="cell-strong">${LCCA.escapeHtml(p.full_name)} <span class="cell-muted">(${LCCA.escapeHtml(p.relationship_type || "")})</span></div>
+              <div class="cell-muted">${LCCA.escapeHtml(p.email || "No email")} &middot; ${LCCA.escapeHtml(p.phone || "No phone")}</div>
+            </div>
+          </div>
+        `).join("")
+      : `<p class="cell-muted">No parent/guardian linked yet. Use the Parents page to link one.</p>`;
+
+    document.getElementById("profileModalBody").innerHTML = `
+      <div class="profile-header">
+        <div class="avatar-lg">${LCCA.initials(learner.full_name)}</div>
+        <div class="meta">
+          <h2>${LCCA.escapeHtml(learner.full_name)}</h2>
+          <div class="sub">${LCCA.escapeHtml(learner.learner_id || learner.learner_code)} &middot; ${LCCA.escapeHtml(learner.grade)} - ${LCCA.escapeHtml(learner.class_name)}</div>
+        </div>
+        <div class="ms-auto text-end">
+          ${statusBadge(learner.status)}
+          <div class="mt-2">${balancePill(learner.balance)}</div>
+        </div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-6">
+          <div class="cell-muted">Date of Admission</div>
+          <div class="cell-strong">${LCCA.dateShort(learner.date_of_admission)}</div>
+        </div>
+        <div class="col-6">
+          <div class="cell-muted">Enrolled Since</div>
+          <div class="cell-strong">${LCCA.timeAgo(learner.created_at)}</div>
+        </div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-12">
+          <div class="cell-muted">Physical Address</div>
+          <div class="cell-strong">${LCCA.escapeHtml(learner.physical_address || "No physical address on file")}</div>
+        </div>
+      </div>
+      <h4 style="font-size:0.95rem;">Parents / Guardians</h4>
+      ${parentsHtml}
+    `;
+  } catch (err) {
+    document.getElementById("profileModalBody").innerHTML = `<div class="text-danger">Failed to load profile: ${LCCA.escapeHtml(err.message)}</div>`;
+  }
+}
+
+loadLearners();
+</script>
+{% endblock %}

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Month-End Processing{% endblock %}
+{% block page_title %}Month-End Processing{% endblock %}
+{% block page_sub %}Automated invoice generation and bulk notification dispatch{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-8">
+    <div class="lcca-panel">
+      <div class="panel-header"><h3>Trigger Month-End Run</h3></div>
+      <div class="panel-body">
+        <p class="cell-muted mb-3">This will generate monthly invoices for all active learners who have fee profiles assigned and send email notifications. Learners already invoiced for the selected period are automatically skipped.</p>
+        <div class="d-flex gap-3 align-items-end flex-wrap">
+          <div>
+            <label class="form-label">Billing Period</label>
+            <input type="month" class="form-control" id="billingPeriod" style="width:180px;">
+          </div>
+          <button class="btn-lcca btn-lcca-gold" id="triggerBtn" onclick="triggerMonthEnd()">
+            <i class="bi bi-play-fill"></i> Run Month-End
+          </button>
+          <div id="runStatus" class="cell-muted"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="lcca-panel h-100">
+      <div class="panel-body text-center">
+        <div class="kpi-icon navy mx-auto mb-2"><i class="bi bi-calendar-check-fill"></i></div>
+        <div class="kpi-label">Scheduled Run</div>
+        <div class="kpi-value" style="font-size:1.1rem;">1st of each month</div>
+        <div class="cell-muted mt-1" style="font-size:0.82rem;">00:05 Africa/Windhoek</div>
+        <div class="cell-muted" style="font-size:0.78rem;margin-top:8px;">Automatic — no action required</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="lcca-panel">
+  <div class="panel-header">
+    <h3>Run History</h3>
+    <button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="loadRuns()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+  </div>
+  <div class="panel-body">
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead><tr>
+          <th>Period</th><th>Triggered By</th><th>Type</th>
+          <th>Status</th><th>Invoices</th><th>Notifications</th><th>Started</th><th>Duration</th><th></th>
+        </tr></thead>
+        <tbody id="runsBody"><tr><td colspan="9"><div class="skeleton" style="height:36px;"></div></td></tr></tbody>
+      </table>
+    </div>
+    <div id="runsEmpty" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Run Detail Modal -->
+<div class="modal fade" id="runDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header"><h5 class="modal-title">Run Detail</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="runDetailBody"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const runDetailModal = new bootstrap.Modal(document.getElementById("runDetailModal"));
+
+// Default to current month
+document.getElementById("billingPeriod").value =
+  new Date().toISOString().slice(0, 7);
+
+async function triggerMonthEnd() {
+  const period = document.getElementById("billingPeriod").value;
+  if (!period) { LCCA.toast("Please select a billing period.", "error"); return; }
+  const btn = document.getElementById("triggerBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-lcca"></span> Running...';
+  document.getElementById("runStatus").textContent = "Processing in background...";
+  try {
+    const r = await LCCA.api.post("/month-end/trigger", { billing_period: period });
+    LCCA.toast(r.message || "Month-end triggered.", "info");
+    // Poll for completion
+    setTimeout(() => { loadRuns(); }, 3000);
+    setTimeout(() => { loadRuns(); }, 8000);
+    setTimeout(() => { loadRuns(); }, 15000);
+  } catch (err) {
+    LCCA.toast("Failed to trigger month-end: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Month-End';
+    document.getElementById("runStatus").textContent = "";
+  }
+}
+
+function statusBadge(status) {
+  const map = { completed:"active", running:"info", failed:"suspended" };
+  return `<span class="badge-status ${map[status]||'generated'}">${status}</span>`;
+}
+
+async function loadRuns() {
+  try {
+    const runs = await LCCA.api.get("/month-end/runs");
+    const tbody = document.getElementById("runsBody");
+    const empty = document.getElementById("runsEmpty");
+    if (!runs.length) {
+      tbody.innerHTML = "";
+      empty.style.display = "block";
+      empty.innerHTML = `<div class="empty-state"><i class="bi bi-calendar"></i><h4>No runs yet</h4><p>Trigger a month-end run above or wait for the scheduled run on the 1st of the month.</p></div>`;
+      return;
+    }
+    empty.style.display = "none";
+    tbody.innerHTML = runs.map(r => {
+      const duration = r.completed_at && r.started_at
+        ? `${Math.round((new Date(r.completed_at) - new Date(r.started_at)) / 1000)}s`
+        : r.status === "running" ? "In progress..." : "—";
+      return `<tr>
+        <td class="cell-mono">${LCCA.escapeHtml(r.billing_period)}</td>
+        <td class="cell-muted">${LCCA.escapeHtml(r.triggered_by||"system")}</td>
+        <td><span class="badge-status ${r.trigger_type==="scheduled"?"info":"generated"}">${r.trigger_type||"manual"}</span></td>
+        <td>${statusBadge(r.status)}</td>
+        <td class="cell-strong">${r.invoices_generated}</td>
+        <td class="cell-strong">${r.notifications_sent}</td>
+        <td class="cell-muted">${LCCA.dateTimeShort(r.started_at)}</td>
+        <td class="cell-muted">${duration}</td>
+        <td><button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="viewRunDetail(${r.id})"><i class="bi bi-eye"></i></button></td>
+      </tr>`;
+    }).join("");
+  } catch (err) { LCCA.toast("Failed to load runs: " + err.message, "error"); }
+}
+
+async function viewRunDetail(id) {
+  const run = await LCCA.api.get(`/month-end/runs/${id}`);
+  document.getElementById("runDetailBody").innerHTML = `
+    <div class="row g-3 mb-3">
+      <div class="col-3"><div class="cell-muted">Period</div><div class="cell-strong">${run.billing_period}</div></div>
+      <div class="col-3"><div class="cell-muted">Status</div><div>${statusBadge(run.status)}</div></div>
+      <div class="col-3"><div class="cell-muted">Invoices</div><div class="cell-strong">${run.invoices_generated}</div></div>
+      <div class="col-3"><div class="cell-muted">Notifications</div><div class="cell-strong">${run.notifications_sent}</div></div>
+    </div>
+    ${run.errors ? `<div class="alert alert-danger py-2" style="font-size:0.85rem;"><strong>Errors:</strong><pre style="margin:0;white-space:pre-wrap;">${LCCA.escapeHtml(run.errors)}</pre></div>` : ""}
+    <div class="cell-muted mb-1" style="font-size:0.8rem;">Processing Log</div>
+    <pre style="background:var(--surface-sunken);border-radius:6px;padding:12px;font-size:0.78rem;max-height:320px;overflow-y:auto;white-space:pre-wrap;">${LCCA.escapeHtml(run.log||"No log available.")}</pre>
+  `;
+  runDetailModal.show();
+}
+
+loadRuns();
+</script>
+{% endblock %}

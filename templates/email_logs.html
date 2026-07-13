@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Email Logs{% endblock %}
+{% block page_title %}Email Logs{% endblock %}
+{% block page_sub %}Simulated email activity for invoice notifications{% endblock %}
+
+{% block content %}
+<div class="lcca-panel">
+  <div class="panel-body">
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead>
+          <tr>
+            <th>Sent At</th>
+            <th>Invoice</th>
+            <th>Learner</th>
+            <th>Recipient</th>
+            <th>Subject</th>
+            <th>Status</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="logsTableBody">
+          <tr><td colspan="7"><div class="skeleton" style="height:40px;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="logsEmptyState" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Email Preview Modal -->
+<div class="modal fade" id="emailPreviewModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">Email Preview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="emailPreviewBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn-lcca btn-lcca-navy" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allLogs = [];
+const emailPreviewModal = new bootstrap.Modal(document.getElementById("emailPreviewModal"));
+
+function renderLogsTable(logs) {
+  const tbody = document.getElementById("logsTableBody");
+  const emptyState = document.getElementById("logsEmptyState");
+
+  if (!logs.length) {
+    tbody.innerHTML = "";
+    emptyState.style.display = "block";
+    emptyState.innerHTML = `<div class="empty-state"><i class="bi bi-envelope"></i><h4>No emails sent yet</h4><p>Send an invoice from the Invoices page to see simulated email activity here.</p></div>`;
+    return;
+  }
+  emptyState.style.display = "none";
+
+  tbody.innerHTML = logs.map(log => `
+    <tr>
+      <td class="cell-muted">${LCCA.dateTimeShort(log.sent_at)}</td>
+      <td class="cell-mono">${LCCA.escapeHtml(log.invoice_number || "-")}</td>
+      <td class="cell-strong">${LCCA.escapeHtml(log.learner_name || "-")}</td>
+      <td class="cell-muted">${LCCA.escapeHtml(log.recipient_email)}</td>
+      <td style="max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${LCCA.escapeHtml(log.subject)}</td>
+      <td><span class="badge-status ${log.status.toLowerCase()}">${log.status}</span></td>
+      <td style="text-align:right;">
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="previewEmail(${log.id})"><i class="bi bi-eye"></i> Preview</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function loadLogs() {
+  try {
+    allLogs = await LCCA.api.get("/email-logs");
+    renderLogsTable(allLogs);
+  } catch (err) {
+    LCCA.toast("Failed to load email logs: " + err.message, "error");
+  }
+}
+
+function previewEmail(id) {
+  const log = allLogs.find(l => l.id === id);
+  if (!log) return;
+  document.getElementById("emailPreviewBody").innerHTML = `
+    <div class="mb-3">
+      <div class="cell-muted">To</div>
+      <div class="cell-strong">${LCCA.escapeHtml(log.recipient_email)}</div>
+    </div>
+    <div class="mb-3">
+      <div class="cell-muted">Subject</div>
+      <div class="cell-strong">${LCCA.escapeHtml(log.subject)}</div>
+    </div>
+    <div class="divider-soft"></div>
+    <pre style="white-space:pre-wrap; font-family:var(--font-body); font-size:0.9rem; color:var(--ink);">${LCCA.escapeHtml(log.body_preview || "")}</pre>
+  `;
+  emailPreviewModal.show();
+}
+
+loadLogs();
+</script>
+{% endblock %}

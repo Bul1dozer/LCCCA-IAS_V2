@@ -1,0 +1,37 @@
+# LCCA-IAS v2 — Core dependencies
+fastapi==0.137.0
+uvicorn[standard]==0.49.0
+sqlalchemy==2.0.50
+jinja2==3.1.6
+itsdangerous==2.2.0
+python-multipart==0.0.32
+
+# PDF generation
+reportlab==4.4.10
+pillow==12.1.1
+
+# Email delivery (async SMTP)
+aiosmtplib==5.1.2
+
+# Job scheduling (month-end automation)
+apscheduler==3.11.2
+
+# Excel import/export
+openpyxl
+
+# HTTP client (SMS providers, webhooks)
+httpx==0.28.1
+
+# Security
+passlib[bcrypt]==1.7.4
+
+# Two-factor authentication (TOTP)
+pyotp==2.10.0
+qrcode==8.2
+
+# PostgreSQL (uncomment for production deployment)
+# psycopg2-binary==2.9.9
+
+# Development utilities
+# pytest
+# httpx  (already included above, also used for testing)

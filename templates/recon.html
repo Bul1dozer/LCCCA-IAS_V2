@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Bank Reconciliation{% endblock %}
+{% block page_title %}Bank Reconciliation{% endblock %}
+{% block page_sub %}Import bank statements and match transactions to payment records{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-5">
+    <div class="lcca-panel h-100">
+      <div class="panel-header"><h3>Import Bank Statement</h3></div>
+      <div class="panel-body">
+        <p class="cell-muted">Upload a CSV export from your bank. Credits (money in) are auto-matched by reference number.</p>
+        <p class="cell-muted" style="font-size:0.8rem;">Columns: <code>date</code> (YYYY-MM-DD), <code>description</code>, <code>amount</code> (credits only), <code>reference</code></p>
+        <input type="file" class="form-control mb-3" id="stmtFile" accept=".csv">
+        <button class="btn-lcca btn-lcca-navy w-100" onclick="importStatement()">
+          <i class="bi bi-bank"></i> Import Statement
+        </button>
+        <div id="stmtResult" class="mt-3"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="lcca-panel h-100">
+      <div class="panel-header"><h3>Reconciliation Summary</h3></div>
+      <div class="panel-body">
+        <div class="row g-2" id="reconSummary">
+          <div class="col-12 text-center cell-muted py-4">Loading summary...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="lcca-panel">
+  <div class="panel-header">
+    <h3>Statement Lines</h3>
+    <div class="d-flex gap-2">
+      <select class="form-select form-select-sm" id="reconStatusFilter" style="width:auto;" onchange="loadLines()">
+        <option value="">All</option>
+        <option value="unmatched">Unmatched</option>
+        <option value="matched">Auto-Matched</option>
+        <option value="manually_matched">Manually Matched</option>
+        <option value="excluded">Excluded</option>
+      </select>
+      <button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="loadLines()"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead><tr>
+          <th>Date</th><th>Description</th><th>Amount</th><th>Reference</th><th>Status</th><th style="text-align:right;">Actions</th>
+        </tr></thead>
+        <tbody id="linesBody"><tr><td colspan="6"><div class="skeleton" style="height:36px;"></div></td></tr></tbody>
+      </table>
+    </div>
+    <div id="linesEmpty" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Manual Match Modal -->
+<div class="modal fade" id="matchModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header"><h5 class="modal-title">Match to Payment</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form id="matchForm">
+        <div class="modal-body">
+          <input type="hidden" id="matchLineId">
+          <div id="matchLineInfo" class="mb-3 p-3" style="background:var(--surface-sunken);border-radius:6px;"></div>
+          <label class="form-label">Select Payment to Match</label>
+          <select class="form-select" id="matchPaymentSelect" required></select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-gold"><i class="bi bi-link-45deg"></i> Match</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allLines = [], allPayments = [];
+const matchModal = new bootstrap.Modal(document.getElementById("matchModal"));
+const RECON_COLORS = { unmatched:"warning", matched:"active", manually_matched:"active", excluded:"info" };
+const RECON_ICONS = { unmatched:"question-circle", matched:"check-circle-fill", manually_matched:"link-45deg", excluded:"dash-circle" };
+
+async function importStatement() {
+  const fileInput = document.getElementById("stmtFile");
+  if (!fileInput.files.length) { LCCA.toast("Please select a CSV file.", "error"); return; }
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+  const resultEl = document.getElementById("stmtResult");
+  resultEl.innerHTML = `<div class="d-flex align-items-center gap-2"><span class="spinner-border spinner-border-sm"></span> Importing...</div>`;
+  try {
+    const res = await fetch("/api/recon/import-statement", {
+      method: "POST", body: formData, credentials: "same-origin"
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Import failed");
+    resultEl.innerHTML = `
+      <div class="row g-2">
+        <div class="col-4"><div class="kpi-card p-2 text-center"><div class="kpi-label">Lines</div><div class="kpi-value" style="font-size:1.2rem;">${data.lines_imported}</div></div></div>
+        <div class="col-4"><div class="kpi-card p-2 text-center"><div class="kpi-label">Auto-Matched</div><div class="kpi-value" style="font-size:1.2rem;color:var(--success);">${data.auto_matched}</div></div></div>
+        <div class="col-4"><div class="kpi-card p-2 text-center"><div class="kpi-label">Errors</div><div class="kpi-value" style="font-size:1.2rem;color:${data.errors&&data.errors.length?'var(--danger)':'var(--success)'};">${data.errors?data.errors.length:0}</div></div></div>
+      </div>
+    `;
+    LCCA.toast(`Imported ${data.lines_imported} lines, ${data.auto_matched} auto-matched.`);
+    loadLines();
+    loadSummary();
+  } catch (err) {
+    resultEl.innerHTML = `<div class="text-danger">${LCCA.escapeHtml(err.message)}</div>`;
+    LCCA.toast("Import failed: " + err.message, "error");
+  }
+}
+
+async function loadSummary() {
+  try {
+    const rows = await LCCA.api.get("/recon/summary");
+    const el = document.getElementById("reconSummary");
+    if (!rows.length) {
+      el.innerHTML = `<div class="col-12 text-center cell-muted py-4">No statement lines imported yet.</div>`;
+      return;
+    }
+    el.innerHTML = rows.map(r => `
+      <div class="col-6 col-md-3">
+        <div class="kpi-card p-3 text-center">
+          <div class="kpi-icon ${r.status==="matched"||r.status==="manually_matched"?"green":r.status==="excluded"?"blue":"gold"} mx-auto mb-2">
+            <i class="bi bi-${RECON_ICONS[r.status]||"circle"}"></i></div>
+          <div class="kpi-label">${r.status.replace(/_/g," ")}</div>
+          <div class="kpi-value" style="font-size:1.2rem;">${r.count}</div>
+          <div class="cell-muted" style="font-size:0.78rem;">${LCCA.currency(r.total)}</div>
+        </div>
+      </div>
+    `).join("");
+  } catch (err) { /* silent */ }
+}
+
+async function loadLines() {
+  const status = document.getElementById("reconStatusFilter").value;
+  try {
+    allLines = await LCCA.api.get(`/recon/lines?${status?"status="+status:""}&limit=200`);
+    const tbody = document.getElementById("linesBody");
+    const empty = document.getElementById("linesEmpty");
+    if (!allLines.length) {
+      tbody.innerHTML = "";
+      empty.style.display = "block";
+      empty.innerHTML = `<div class="empty-state"><i class="bi bi-bank"></i><h4>No statement lines</h4><p>Import a bank statement CSV to begin reconciliation.</p></div>`;
+      return;
+    }
+    empty.style.display = "none";
+    tbody.innerHTML = allLines.map(l => `
+      <tr>
+        <td class="cell-muted">${LCCA.escapeHtml(l.transaction_date)}</td>
+        <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${LCCA.escapeHtml(l.description||"")}</td>
+        <td class="cell-strong">${LCCA.currency(l.amount)}</td>
+        <td class="cell-mono">${LCCA.escapeHtml(l.reference||"—")}</td>
+        <td><span class="badge-status ${RECON_COLORS[l.recon_status]||"generated"}">
+          <i class="bi bi-${RECON_ICONS[l.recon_status]||"circle"} me-1"></i>${l.recon_status.replace(/_/g," ")}
+        </span></td>
+        <td style="text-align:right;white-space:nowrap;">
+          ${l.recon_status==="unmatched" ? `
+            <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Match to payment" onclick="openMatch(${l.id})"><i class="bi bi-link-45deg"></i></button>
+            <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Exclude" onclick="excludeLine(${l.id})"><i class="bi bi-dash-circle"></i></button>
+          ` : l.recon_status==="excluded" ? `
+            <span class="cell-muted" style="font-size:0.78rem;">Excluded</span>
+          ` : `
+            <span class="cell-muted" style="font-size:0.78rem;">Matched #${l.matched_payment_id||""}</span>
+          `}
+        </td>
+      </tr>
+    `).join("");
+  } catch (err) { LCCA.toast("Failed to load lines: " + err.message, "error"); }
+}
+
+async function openMatch(lineId) {
+  const line = allLines.find(l => l.id === lineId);
+  document.getElementById("matchLineId").value = lineId;
+  document.getElementById("matchLineInfo").innerHTML = `
+    <div class="cell-muted">Statement Line</div>
+    <div class="cell-strong">${LCCA.escapeHtml(line.description||"")} — ${LCCA.currency(line.amount)}</div>
+    <div class="cell-muted">${LCCA.escapeHtml(line.transaction_date)} &middot; Ref: ${LCCA.escapeHtml(line.reference||"—")}</div>
+  `;
+  try {
+    allPayments = await LCCA.api.get("/payments");
+    document.getElementById("matchPaymentSelect").innerHTML = allPayments
+      .filter(p => !p.bank_statement_line_id)
+      .map(p => `<option value="${p.id}">${LCCA.escapeHtml(p.learner_name||"")} — ${LCCA.currency(p.amount_paid)} — ${LCCA.dateShort(p.date_paid)} (${LCCA.escapeHtml(p.reference_number||"no ref")})</option>`)
+      .join("") || "<option disabled>No unmatched payments available</option>";
+    matchModal.show();
+  } catch (err) { LCCA.toast("Failed to load payments: " + err.message, "error"); }
+}
+
+document.getElementById("matchForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const lineId = document.getElementById("matchLineId").value;
+  const paymentId = parseInt(document.getElementById("matchPaymentSelect").value);
+  try {
+    await LCCA.api.post(`/recon/match/${lineId}`, { payment_id: paymentId });
+    LCCA.toast("Payment matched successfully.");
+    matchModal.hide();
+    loadLines();
+    loadSummary();
+  } catch (err) { LCCA.toast(err.message, "error"); }
+});
+
+async function excludeLine(lineId) {
+  if (!confirm("Exclude this statement line from reconciliation?")) return;
+  try {
+    await LCCA.api.post(`/recon/exclude/${lineId}`, {});
+    LCCA.toast("Line excluded.");
+    loadLines();
+    loadSummary();
+  } catch (err) { LCCA.toast(err.message, "error"); }
+}
+
+loadLines();
+loadSummary();
+</script>
+{% endblock %}

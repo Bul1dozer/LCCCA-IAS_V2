@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+{% block title %}Fee Catalogue{% endblock %}
+{% block page_title %}Fee Catalogue{% endblock %}
+{% block page_sub %}Manage billable items, frequencies, and learner-specific fee profiles{% endblock %}
+{% block topbar_actions %}
+<button class="btn-lcca btn-lcca-gold" onclick="openCreateFeeItem()"><i class="bi bi-plus-lg"></i> Add Fee Item</button>
+{% endblock %}
+
+{% block content %}
+<!-- Tab nav -->
+<ul class="nav nav-tabs mb-3" id="feeTabNav">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tabCatalogue">Catalogue</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabProfiles">Learner Profiles</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabRoutes">Transport Routes</a></li>
+</ul>
+
+<div class="tab-content">
+<!-- ===== CATALOGUE TAB ===== -->
+<div class="tab-pane fade show active" id="tabCatalogue">
+  <div class="lcca-panel">
+    <div class="panel-body">
+      <div class="table-toolbar mb-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <select class="form-select form-select-sm" id="freqFilter" style="width:auto;" onchange="loadCatalogue()">
+            <option value="">All Frequencies</option>
+            <option value="monthly">Monthly</option>
+            <option value="term">Term</option>
+            <option value="annual">Annual</option>
+            <option value="once_off">Once-Off</option>
+          </select>
+          <select class="form-select form-select-sm" id="mandatoryFilter" style="width:auto;" onchange="loadCatalogue()">
+            <option value="">Mandatory &amp; Optional</option>
+            <option value="true">Mandatory Only</option>
+            <option value="false">Optional Only</option>
+          </select>
+          <select class="form-select form-select-sm" id="activeFilter" style="width:auto;" onchange="loadCatalogue()">
+            <option value="false">All Items</option>
+            <option value="true">Active Only</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table-lcca">
+          <thead><tr>
+            <th>Name</th><th>Category</th><th>Frequency</th><th>Amount</th>
+            <th>Mandatory</th><th>Applicable Grades</th><th>Status</th>
+            <th style="text-align:right;">Actions</th>
+          </tr></thead>
+          <tbody id="catalogueBody"><tr><td colspan="8"><div class="skeleton" style="height:36px;"></div></td></tr></tbody>
+        </table>
+      </div>
+      <div id="catalogueEmpty" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROFILES TAB ===== -->
+<div class="tab-pane fade" id="tabProfiles">
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="lcca-panel">
+        <div class="panel-header"><h3>Select Learner</h3></div>
+        <div class="panel-body">
+          <div class="search-box mb-2"><i class="bi bi-search"></i>
+            <input type="text" id="profileSearch" placeholder="Search learner...">
+          </div>
+          <div id="learnerList" style="max-height:480px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-8">
+      <div class="lcca-panel">
+        <div class="panel-header" id="profileHeader">
+          <h3>Fee Profile</h3>
+          <div class="d-flex gap-2" id="profileActions" style="display:none!important;"></div>
+        </div>
+        <div class="panel-body" id="profileBody">
+          <div class="empty-state"><i class="bi bi-person"></i><h4>Select a learner</h4><p>Choose a learner from the list to view and edit their fee profile.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ROUTES TAB ===== -->
+<div class="tab-pane fade" id="tabRoutes">
+  <div class="lcca-panel">
+    <div class="panel-header">
+      <h3>Transport Routes</h3>
+      <button class="btn-lcca btn-lcca-gold btn-lcca-sm" onclick="openCreateRoute()"><i class="bi bi-plus-lg"></i> Add Route</button>
+    </div>
+    <div class="panel-body">
+      <div id="routesList"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- Add/Edit Fee Item Modal -->
+<div class="modal fade" id="feeItemModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header"><h5 class="modal-title" id="feeItemModalTitle">Add Fee Item</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form id="feeItemForm">
+        <div class="modal-body">
+          <input type="hidden" id="fiId">
+          <div class="row g-3 mb-3">
+            <div class="col-8"><label class="form-label">Name</label>
+              <input type="text" class="form-control" id="fiName" required></div>
+            <div class="col-4"><label class="form-label">Category</label>
+              <select class="form-select" id="fiCategory">
+                <option value="tuition">Tuition</option><option value="registration">Registration</option>
+                <option value="sport">Sport</option><option value="aftercare">Aftercare</option>
+                <option value="transport">Transport</option><option value="hostel">Hostel</option>
+                <option value="activity">Activity</option><option value="material">Material</option>
+                <option value="event">Event</option><option value="other">Other</option>
+              </select></div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-4"><label class="form-label">Amount (N$)</label>
+              <input type="number" step="0.01" min="0" class="form-control" id="fiAmount" required></div>
+            <div class="col-4"><label class="form-label">Frequency</label>
+              <select class="form-select" id="fiFrequency">
+                <option value="monthly">Monthly</option><option value="term">Term</option>
+                <option value="annual">Annual</option><option value="once_off">Once-Off</option>
+              </select></div>
+            <div class="col-4"><label class="form-label">Sort Order</label>
+              <input type="number" class="form-control" id="fiSortOrder" value="0"></div>
+          </div>
+          <div class="mb-3"><label class="form-label">Description</label>
+            <input type="text" class="form-control" id="fiDescription"></div>
+          <div class="row g-3 mb-3">
+            <div class="col-6"><label class="form-label">Applicable Grades <span class="cell-muted">(leave blank = all)</span></label>
+              <input type="text" class="form-control" id="fiGrades" placeholder="e.g. Grade 1,Grade 2,Grade 3"></div>
+            <div class="col-6"><label class="form-label">Applicable Classes <span class="cell-muted">(leave blank = all)</span></label>
+              <input type="text" class="form-control" id="fiClasses" placeholder="e.g. 1A,1B"></div>
+          </div>
+          <div class="row g-3 mb-2">
+            <div class="col-4"><label class="form-label">Effective From</label>
+              <input type="date" class="form-control" id="fiEffectiveFrom"></div>
+            <div class="col-4"><label class="form-label">Effective To</label>
+              <input type="date" class="form-control" id="fiEffectiveTo"></div>
+            <div class="col-4 d-flex align-items-end gap-3 pb-1">
+              <div class="form-check"><input class="form-check-input" type="checkbox" id="fiMandatory">
+                <label class="form-check-label" for="fiMandatory">Mandatory</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" id="fiActive" checked>
+                <label class="form-check-label" for="fiActive">Active</label></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-navy" id="feeItemSubmitBtn">Save Fee Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Fee to Learner Modal -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header"><h5 class="modal-title">Assign Fee Item</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form id="assignForm">
+        <div class="modal-body">
+          <input type="hidden" id="assignLearnerId">
+          <div class="mb-3"><label class="form-label">Fee Item</label>
+            <select class="form-select" id="assignFeeItem" required></select></div>
+          <div class="mb-3"><label class="form-label">Custom Amount (N$) <span class="cell-muted">— leave blank to use catalogue price</span></label>
+            <input type="number" step="0.01" min="0" class="form-control" id="assignCustomAmount" placeholder="Optional override"></div>
+          <div class="mb-1"><label class="form-label">Notes</label>
+            <input type="text" class="form-control" id="assignNotes"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-gold">Assign</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Route Modal -->
+<div class="modal fade" id="routeModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header"><h5 class="modal-title" id="routeModalTitle">Add Route</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form id="routeForm">
+        <div class="modal-body">
+          <input type="hidden" id="routeId">
+          <div class="mb-3"><label class="form-label">Route Name</label>
+            <input type="text" class="form-control" id="routeName" required></div>
+          <div class="mb-3"><label class="form-label">Description</label>
+            <input type="text" class="form-control" id="routeDesc"></div>
+          <div class="mb-1"><label class="form-label">Monthly Fee (N$)</label>
+            <input type="number" step="0.01" min="0" class="form-control" id="routeFee" required></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-navy">Save Route</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let catalogue = [], allLearners = [], currentProfileId = null, allRoutes = [];
+const feeItemModal = new bootstrap.Modal(document.getElementById("feeItemModal"));
+const assignModal = new bootstrap.Modal(document.getElementById("assignModal"));
+const routeModal = new bootstrap.Modal(document.getElementById("routeModal"));
+
+const FREQ_LABELS = {monthly:"Monthly",term:"Term",annual:"Annual",once_off:"Once-Off"};
+const CAT_LABELS = {tuition:"Tuition",registration:"Registration",sport:"Sport",aftercare:"Aftercare",
+  transport:"Transport",hostel:"Hostel",activity:"Activity",material:"Material",event:"Event",other:"Other"};
+
+// ---- Catalogue ----
+async function loadCatalogue() {
+  const activeOnly = document.getElementById("activeFilter").value === "true";
+  let items = await LCCA.api.get(`/fee-items?active_only=${activeOnly}`);
+  catalogue = items;
+  const freq = document.getElementById("freqFilter").value;
+  const mand = document.getElementById("mandatoryFilter").value;
+  if (freq) items = items.filter(i => i.frequency === freq);
+  if (mand !== "") items = items.filter(i => String(i.is_mandatory) === mand);
+
+  const tbody = document.getElementById("catalogueBody");
+  const empty = document.getElementById("catalogueEmpty");
+  if (!items.length) {
+    tbody.innerHTML = "";
+    empty.style.display = "block";
+    empty.innerHTML = `<div class="empty-state"><i class="bi bi-tags"></i><h4>No fee items found</h4><p>Add fee items to build your school's billing catalogue.</p></div>`;
+    return;
+  }
+  empty.style.display = "none";
+  tbody.innerHTML = items.map(fi => `
+    <tr>
+      <td class="cell-strong">${LCCA.escapeHtml(fi.name)}</td>
+      <td class="cell-muted">${CAT_LABELS[fi.category]||fi.category}</td>
+      <td><span class="badge-status info">${FREQ_LABELS[fi.frequency]||fi.frequency}</span></td>
+      <td class="cell-strong">${LCCA.currency(fi.amount)}</td>
+      <td>${fi.is_mandatory ? '<span class="badge-status active">Mandatory</span>' : '<span class="badge-status generated">Optional</span>'}</td>
+      <td class="cell-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${LCCA.escapeHtml(fi.applicable_grades||"All grades")}</td>
+      <td>${fi.is_active ? '<span class="badge-status active">Active</span>' : '<span class="badge-status suspended">Inactive</span>'}</td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Edit" onclick="openEditFeeItem(${fi.id})"><i class="bi bi-pencil"></i></button>
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="${fi.is_active?'Deactivate':'Activate'}" onclick="toggleItem(${fi.id})">
+          <i class="bi bi-${fi.is_active?'pause':'play'}-fill"></i></button>
+        <button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm btn-icon-only" title="Delete" onclick="deleteFeeItem(${fi.id})"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function openCreateFeeItem() {
+  document.getElementById("feeItemForm").reset();
+  document.getElementById("fiId").value = "";
+  document.getElementById("fiActive").checked = true;
+  document.getElementById("feeItemModalTitle").textContent = "Add Fee Item";
+  feeItemModal.show();
+}
+
+function openEditFeeItem(id) {
+  const fi = catalogue.find(f => f.id === id);
+  if (!fi) return;
+  document.getElementById("fiId").value = fi.id;
+  document.getElementById("fiName").value = fi.name;
+  document.getElementById("fiCategory").value = fi.category;
+  document.getElementById("fiAmount").value = fi.amount;
+  document.getElementById("fiFrequency").value = fi.frequency;
+  document.getElementById("fiSortOrder").value = fi.sort_order;
+  document.getElementById("fiDescription").value = fi.description || "";
+  document.getElementById("fiGrades").value = fi.applicable_grades || "";
+  document.getElementById("fiClasses").value = fi.applicable_classes || "";
+  document.getElementById("fiEffectiveFrom").value = fi.effective_from || "";
+  document.getElementById("fiEffectiveTo").value = fi.effective_to || "";
+  document.getElementById("fiMandatory").checked = fi.is_mandatory;
+  document.getElementById("fiActive").checked = fi.is_active;
+  document.getElementById("feeItemModalTitle").textContent = "Edit Fee Item";
+  feeItemModal.show();
+}
+
+document.getElementById("feeItemForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("fiId").value;
+  const payload = {
+    name: document.getElementById("fiName").value.trim(),
+    category: document.getElementById("fiCategory").value,
+    amount: parseFloat(document.getElementById("fiAmount").value)||0,
+    frequency: document.getElementById("fiFrequency").value,
+    sort_order: parseInt(document.getElementById("fiSortOrder").value)||0,
+    description: document.getElementById("fiDescription").value.trim()||null,
+    applicable_grades: document.getElementById("fiGrades").value.trim()||null,
+    applicable_classes: document.getElementById("fiClasses").value.trim()||null,
+    effective_from: document.getElementById("fiEffectiveFrom").value||null,
+    effective_to: document.getElementById("fiEffectiveTo").value||null,
+    is_mandatory: document.getElementById("fiMandatory").checked,
+    is_active: document.getElementById("fiActive").checked,
+  };
+  const btn = document.getElementById("feeItemSubmitBtn");
+  btn.disabled = true;
+  try {
+    if (id) {
+      await LCCA.api.put(`/fee-items/${id}`, payload);
+      LCCA.toast("Fee item updated.");
+    } else {
+      await LCCA.api.post("/fee-items", payload);
+      LCCA.toast("Fee item created.");
+    }
+    feeItemModal.hide();
+    loadCatalogue();
+  } catch (err) { LCCA.toast(err.message, "error"); }
+  finally { btn.disabled = false; }
+});
+
+async function toggleItem(id) {
+  try {
+    const r = await LCCA.api.put(`/fee-items/${id}/toggle`, {});
+    LCCA.toast(`Fee item ${r.is_active ? "activated" : "deactivated"}.`);
+    loadCatalogue();
+  } catch (err) { LCCA.toast(err.message, "error"); }
+}
+
+async function deleteFeeItem(id) {
+  if (!confirm("Delete this fee item? This cannot be undone if no learners are assigned.")) return;
+  try {
+    await LCCA.api.del(`/fee-items/${id}`);
+    LCCA.toast("Fee item deleted.");
+    loadCatalogue();
+  } catch (err) { LCCA.toast(err.message, "error"); }
+}
+
+// ---- Profiles ----
+async function loadLearnerList() {
+  allLearners = await LCCA.api.get("/learners");
+  renderLearnerList(allLearners);
+}
+
+function renderLearnerList(learners) {
+  document.getElementById("learnerList").innerHTML = learners.map(l => `
+    <div class="activity-item" style="cursor:pointer;padding:10px 8px;border-radius:6px;"
+         onclick="loadProfile(${l.id})" id="litem_${l.id}">
+      <div class="activity-icon" style="background:var(--navy-800);color:var(--gold-400);">${LCCA.initials(l.full_name)}</div>
+      <div>
+        <div class="activity-text cell-strong">${LCCA.escapeHtml(l.full_name)}</div>
+        <div class="activity-time">${LCCA.escapeHtml(l.learner_code)} &middot; ${LCCA.escapeHtml(l.grade)}</div>
+      </div>
+    </div>
+  `).join("") || `<p class="cell-muted text-center py-3">No learners found.</p>`;
+}
+
+document.getElementById("profileSearch").addEventListener("input", LCCA.debounce(e => {
+  const q = e.target.value.toLowerCase();
+  renderLearnerList(allLearners.filter(l =>
+    l.full_name.toLowerCase().includes(q) || l.learner_code.toLowerCase().includes(q) || l.grade.toLowerCase().includes(q)
+  ));
+}, 250));
+
+async function loadProfile(learnerId) {
+  currentProfileId = learnerId;
+  document.querySelectorAll("[id^='litem_']").forEach(el => el.style.background = "");
+  const el = document.getElementById(`litem_${learnerId}`);
+  if (el) el.style.background = "var(--gold-100)";
+
+  const body = document.getElementById("profileBody");
+  body.innerHTML = `<div class="skeleton" style="height:120px;"></div>`;
+  const actionsDiv = document.getElementById("profileActions");
+  actionsDiv.style.display = "flex";
+
+  const profile = await LCCA.api.get(`/fee-items/learner/${learnerId}/profile`);
+  document.getElementById("profileHeader").querySelector("h3").textContent =
+    `${profile.learner_name} — Fee Profile`;
+
+  actionsDiv.innerHTML = `
+    <button class="btn-lcca btn-lcca-gold btn-lcca-sm" onclick="openAssign(${learnerId})"><i class="bi bi-plus-lg"></i> Add Fee</button>
+    <button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="autoAssign(${learnerId})"><i class="bi bi-magic"></i> Auto-Assign</button>
+  `;
+
+  const active = profile.assignments.filter(a => a.is_active);
+  const inactive = profile.assignments.filter(a => !a.is_active);
+
+  body.innerHTML = `
+    <div class="row g-2 mb-3">
+      <div class="col-4"><div class="kpi-card p-3"><div class="kpi-label">Monthly Total</div>
+        <div class="kpi-value" style="font-size:1.3rem;">${LCCA.currency(profile.total_monthly)}</div></div></div>
+      <div class="col-4"><div class="kpi-card p-3"><div class="kpi-label">Active Items</div>
+        <div class="kpi-value" style="font-size:1.3rem;">${active.length}</div></div></div>
+      <div class="col-4"><div class="kpi-card p-3"><div class="kpi-label">Grade</div>
+        <div class="kpi-value" style="font-size:1.1rem;">${LCCA.escapeHtml(profile.grade)}</div></div></div>
+    </div>
+    <table class="table-lcca">
+      <thead><tr><th>Fee Item</th><th>Frequency</th><th>Base</th><th>Effective</th><th>Type</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${[...active,...inactive].map(a => `
+          <tr style="${!a.is_active ? 'opacity:0.5;' : ''}">
+            <td class="cell-strong">${LCCA.escapeHtml(a.fee_name)}</td>
+            <td><span class="badge-status info">${FREQ_LABELS[a.fee_frequency]||a.fee_frequency||"—"}</span></td>
+            <td class="cell-muted">${LCCA.currency(a.base_amount)}</td>
+            <td class="cell-strong">${LCCA.currency(a.effective_amount)}${a.custom_amount!=null?' <span class="cell-muted">(custom)</span>':''}</td>
+            <td>${a.is_mandatory ? '<span class="badge-status active">Mandatory</span>' : '<span class="badge-status generated">Optional</span>'}</td>
+            <td>${a.is_active ? '<span class="badge-status active">Active</span>' : '<span class="badge-status suspended">Inactive</span>'}</td>
+            <td><button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm btn-icon-only" onclick="removeAssignment(${learnerId},${a.id})"><i class="bi bi-x-lg"></i></button></td>
+          </tr>
+        `).join("") || '<tr><td colspan="7" class="text-center cell-muted py-3">No fees assigned.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+}
+
+async function openAssign(learnerId) {
+  document.getElementById("assignLearnerId").value = learnerId;
+  document.getElementById("assignCustomAmount").value = "";
+  document.getElementById("assignNotes").value = "";
+  if (!catalogue.length) catalogue = await LCCA.api.get("/fee-items");
+  document.getElementById("assignFeeItem").innerHTML = catalogue
+    .filter(fi => fi.is_active)
+    .map(fi => `<option value="${fi.id}">${LCCA.escapeHtml(fi.name)} (${FREQ_LABELS[fi.frequency]||fi.frequency}) — ${LCCA.currency(fi.amount)}</option>`)
+    .join("");
+  assignModal.show();
+}
+
+document.getElementById("assignForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const lid = document.getElementById("assignLearnerId").value;
+  const customAmt = document.getElementById("assignCustomAmount").value;
+  try {
+    await LCCA.api.post(`/fee-items/learner/${lid}/assign`, {
+      fee_item_id: parseInt(document.getElementById("assignFeeItem").value),
+      custom_amount: customAmt ? parseFloat(customAmt) : null,
+      notes: document.getElementById("assignNotes").value.trim() || null,
+    });
+    LCCA.toast("Fee assigned successfully.");
+    assignModal.hide();
+    loadProfile(lid);
+  } catch (err) { LCCA.toast(err.message, "error"); }
+});
+
+async function removeAssignment(learnerId, assignmentId) {
+  if (!confirm("Remove this fee assignment?")) return;
+  try {
+    await LCCA.api.del(`/fee-items/learner/${learnerId}/assign/${assignmentId}`);
+    LCCA.toast("Assignment removed.");
+    loadProfile(learnerId);
+  } catch (err) { LCCA.toast(err.message, "error"); }
+}
+
+async function autoAssign(learnerId) {
+  try {
+    const r = await LCCA.api.post(`/fee-items/learner/${learnerId}/auto-assign`, {});
+    LCCA.toast(`Auto-assigned ${r.assigned} mandatory fee(s).`);
+    loadProfile(learnerId);
+  } catch (err) { LCCA.toast(err.message, "error"); }
+}
+
+// ---- Transport Routes ----
+async function loadRoutes() {
+  allRoutes = await LCCA.api.get("/fee-items/transport/routes");
+  const el = document.getElementById("routesList");
+  if (!allRoutes.length) {
+    el.innerHTML = `<div class="empty-state"><i class="bi bi-bus-front"></i><h4>No transport routes</h4><p>Add routes to enable route-based transport pricing.</p></div>`;
+    return;
+  }
+  el.innerHTML = `<table class="table-lcca"><thead><tr><th>Route Name</th><th>Description</th><th>Monthly Fee</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody>${allRoutes.map(r => `
+      <tr>
+        <td class="cell-strong">${LCCA.escapeHtml(r.name)}</td>
+        <td class="cell-muted">${LCCA.escapeHtml(r.description||"—")}</td>
+        <td>${LCCA.currency(r.monthly_fee)}</td>
+        <td>${r.is_active?'<span class="badge-status active">Active</span>':'<span class="badge-status suspended">Inactive</span>'}</td>
+        <td style="text-align:right;"><button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" onclick="openEditRoute(${r.id})"><i class="bi bi-pencil"></i></button></td>
+      </tr>`).join("")}
+    </tbody></table>`;
+}
+
+function openCreateRoute() {
+  document.getElementById("routeForm").reset();
+  document.getElementById("routeId").value = "";
+  document.getElementById("routeModalTitle").textContent = "Add Route";
+  routeModal.show();
+}
+
+function openEditRoute(id) {
+  const r = allRoutes.find(rt => rt.id === id);
+  if (!r) return;
+  document.getElementById("routeId").value = r.id;
+  document.getElementById("routeName").value = r.name;
+  document.getElementById("routeDesc").value = r.description || "";
+  document.getElementById("routeFee").value = r.monthly_fee;
+  document.getElementById("routeModalTitle").textContent = "Edit Route";
+  routeModal.show();
+}
+
+document.getElementById("routeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("routeId").value;
+  const payload = {
+    name: document.getElementById("routeName").value.trim(),
+    description: document.getElementById("routeDesc").value.trim() || null,
+    monthly_fee: parseFloat(document.getElementById("routeFee").value) || 0,
+  };
+  try {
+    if (id) {
+      await LCCA.api.put(`/fee-items/transport/routes/${id}`, payload);
+      LCCA.toast("Route updated.");
+    } else {
+      await LCCA.api.post("/fee-items/transport/routes", payload);
+      LCCA.toast("Route created.");
+    }
+    routeModal.hide();
+    loadRoutes();
+  } catch (err) { LCCA.toast(err.message, "error"); }
+});
+
+// Tab change listeners to lazy-load
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+  tab.addEventListener("shown.bs.tab", e => {
+    const target = e.target.getAttribute("href");
+    if (target === "#tabProfiles" && !allLearners.length) loadLearnerList();
+    if (target === "#tabRoutes") loadRoutes();
+  });
+});
+
+loadCatalogue();
+</script>
+{% endblock %}

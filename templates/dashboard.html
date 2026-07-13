@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Overview of learners, fees, and collections{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-2" id="kpiRow">
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-icon navy"><i class="bi bi-mortarboard-fill"></i></div>
+      <div class="kpi-label">Total Learners</div>
+      <div class="kpi-value" id="kpiLearners">&mdash;</div>
+      <div class="kpi-trend text-muted" id="kpiLearnersSub"></div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-icon blue"><i class="bi bi-people-fill"></i></div>
+      <div class="kpi-label">Total Parents</div>
+      <div class="kpi-value" id="kpiParents">&mdash;</div>
+      <div class="kpi-trend text-muted">Linked guardian accounts</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-icon red"><i class="bi bi-exclamation-circle-fill"></i></div>
+      <div class="kpi-label">Outstanding Balance</div>
+      <div class="kpi-value" id="kpiOutstanding">&mdash;</div>
+      <div class="kpi-trend text-muted">Across all learners</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-icon green"><i class="bi bi-cash-coin"></i></div>
+      <div class="kpi-label">Payments Received</div>
+      <div class="kpi-value" id="kpiPayments">&mdash;</div>
+      <div class="kpi-trend text-muted" id="kpiCollectionRate"></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-icon gold"><i class="bi bi-file-earmark-text-fill"></i></div>
+      <div class="kpi-label">Invoices Generated</div>
+      <div class="kpi-value" id="kpiInvoicesGenerated">&mdash;</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-icon gold"><i class="bi bi-envelope-check-fill"></i></div>
+      <div class="kpi-label">Invoices Sent</div>
+      <div class="kpi-value" id="kpiInvoicesSent">&mdash;</div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="kpi-card d-flex flex-column justify-content-center">
+      <div class="kpi-label">Collection Rate</div>
+      <div class="d-flex align-items-center gap-3 mt-1">
+        <div class="kpi-value" id="kpiRateValue">&mdash;</div>
+        <div class="progress flex-grow-1" style="height:8px; border-radius:6px;">
+          <div class="progress-bar" id="kpiRateBar" role="progressbar" style="width:0%; background:var(--gold-500);"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="lcca-panel mb-3">
+      <div class="panel-header">
+        <h3>Monthly Collections</h3>
+        <span class="cell-muted">Last 6 months</span>
+      </div>
+      <div class="panel-body">
+        <canvas id="collectionsChart" height="220"></canvas>
+      </div>
+    </div>
+
+    <div class="lcca-panel">
+      <div class="panel-header">
+        <h3>Learners by Grade</h3>
+      </div>
+      <div class="panel-body">
+        <canvas id="gradeChart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="lcca-panel">
+      <div class="panel-header">
+        <h3>Recent Activity</h3>
+      </div>
+      <div class="panel-body" id="activityFeed" style="max-height: 620px; overflow-y:auto;">
+        <div class="skeleton" style="height:48px; margin-bottom:10px;"></div>
+        <div class="skeleton" style="height:48px; margin-bottom:10px;"></div>
+        <div class="skeleton" style="height:48px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+const iconMap = {
+  payment: "cash-coin",
+  invoice: "file-earmark-text",
+  learner: "person-plus",
+  email: "envelope-check",
+};
+
+async function loadDashboard() {
+  try {
+    const stats = await LCCA.api.get("/dashboard/stats");
+    document.getElementById("kpiLearners").textContent = stats.total_learners;
+    document.getElementById("kpiLearnersSub").textContent = `${stats.active_learners} active`;
+    document.getElementById("kpiParents").textContent = stats.total_parents;
+    document.getElementById("kpiOutstanding").textContent = LCCA.currency(stats.total_outstanding_balance);
+    document.getElementById("kpiPayments").textContent = LCCA.currency(stats.total_payments_received);
+    document.getElementById("kpiCollectionRate").textContent = `${stats.collection_rate}% collection rate`;
+    document.getElementById("kpiInvoicesGenerated").textContent = stats.invoices_generated;
+    document.getElementById("kpiInvoicesSent").textContent = stats.invoices_sent;
+    document.getElementById("kpiRateValue").textContent = `${stats.collection_rate}%`;
+    document.getElementById("kpiRateBar").style.width = `${stats.collection_rate}%`;
+  } catch (err) {
+    LCCA.toast("Could not load dashboard stats: " + err.message, "error");
+  }
+
+  try {
+    const activity = await LCCA.api.get("/dashboard/activity?limit=12");
+    const feed = document.getElementById("activityFeed");
+    if (!activity.length) {
+      feed.innerHTML = `<div class="empty-state"><i class="bi bi-inbox"></i><h4>No activity yet</h4><p>Actions like payments and invoices will show up here.</p></div>`;
+    } else {
+      feed.innerHTML = activity.map(a => `
+        <div class="activity-item">
+          <div class="activity-icon"><i class="bi bi-${a.icon}"></i></div>
+          <div>
+            <div class="activity-text">${LCCA.escapeHtml(a.description)}</div>
+            <div class="activity-time">${LCCA.timeAgo(a.timestamp)}</div>
+          </div>
+        </div>
+      `).join("");
+    }
+  } catch (err) {
+    LCCA.toast("Could not load activity feed: " + err.message, "error");
+  }
+
+  try {
+    const collections = await LCCA.api.get("/dashboard/collections-chart?months=6");
+    new Chart(document.getElementById("collectionsChart"), {
+      type: "bar",
+      data: {
+        labels: collections.map(c => c.month),
+        datasets: [{
+          label: "Collections (N$)",
+          data: collections.map(c => c.total),
+          backgroundColor: "#102A59",
+          borderRadius: 6,
+          maxBarThickness: 46,
+        }],
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: "#edeff5" }, ticks: { callback: (v) => "N$" + v.toLocaleString() } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+  } catch (err) {
+    LCCA.toast("Could not load collections chart: " + err.message, "error");
+  }
+
+  try {
+    const grades = await LCCA.api.get("/dashboard/grade-distribution");
+    new Chart(document.getElementById("gradeChart"), {
+      type: "bar",
+      data: {
+        labels: grades.map(g => g.grade),
+        datasets: [{
+          label: "Learners",
+          data: grades.map(g => g.count),
+          backgroundColor: "#D4AF37",
+          borderRadius: 6,
+          maxBarThickness: 36,
+        }],
+      },
+      options: {
+        indexAxis: "y",
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, grid: { color: "#edeff5" }, ticks: { stepSize: 1 } },
+          y: { grid: { display: false } },
+        },
+      },
+    });
+  } catch (err) {
+    LCCA.toast("Could not load grade distribution: " + err.message, "error");
+  }
+}
+
+loadDashboard();
+</script>
+{% endblock %}

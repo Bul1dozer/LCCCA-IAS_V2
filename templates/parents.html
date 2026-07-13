@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+{% block title %}Parents{% endblock %}
+{% block page_title %}Parents &amp; Guardians{% endblock %}
+{% block page_sub %}Manage parent/guardian contact records{% endblock %}
+{% block topbar_actions %}
+<button class="btn-lcca btn-lcca-gold" onclick="openCreateParent()">
+  <i class="bi bi-plus-lg"></i> Add Parent
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="lcca-panel">
+  <div class="panel-body">
+    <div class="table-toolbar">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="text" id="searchInput" placeholder="Search by name, email, or phone...">
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead>
+          <tr>
+            <th>Full Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Address</th>
+            <th>Linked Learners</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="parentsTableBody">
+          <tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="parentsEmptyState" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Add / Edit Parent Modal -->
+<div class="modal fade" id="parentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title" id="parentModalTitle">Add Parent / Guardian</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="parentForm">
+        <div class="modal-body">
+          <input type="hidden" id="parentId">
+          <div class="mb-3">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" id="parentFullName" required>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Email Address</label>
+              <input type="email" class="form-control" id="parentEmail">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Phone Number</label>
+              <input type="text" class="form-control" id="parentPhone">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Physical Address</label>
+            <textarea class="form-control" id="parentAddress" rows="2"></textarea>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Employer Name</label>
+              <input type="text" class="form-control" id="parentEmployerName">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Position</label>
+              <input type="text" class="form-control" id="parentPosition">
+            </div>
+          </div>
+          <div class="row g-2 mb-1">
+            <div class="col-6">
+              <label class="form-label">Employer Address</label>
+              <input type="text" class="form-control" id="parentEmployerAddress">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Employer Phone</label>
+              <input type="text" class="form-control" id="parentEmployerPhone">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-navy" id="parentSubmitBtn">Save Parent</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Parent Profile / Link Learner Modal -->
+<div class="modal fade" id="parentProfileModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">Parent Profile</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="parentProfileBody">
+        <div class="skeleton" style="height:120px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-lcca btn-lcca-navy" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Link Learner Modal -->
+<div class="modal fade" id="linkLearnerModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">Link a Learner</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="linkLearnerForm">
+        <div class="modal-body">
+          <input type="hidden" id="linkParentId">
+          <div class="mb-3">
+            <label class="form-label">Learner</label>
+            <select class="form-select" id="linkLearnerSelect" required></select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label">Relationship</label>
+            <select class="form-select" id="linkRelationshipType">
+              <option>Mother</option>
+              <option>Father</option>
+              <option>Guardian</option>
+              <option>Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-navy">Link Learner</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteParentModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content lcca-modal">
+      <div class="modal-body text-center py-4">
+        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size:2rem;"></i>
+        <h5 class="mt-3">Delete this parent record?</h5>
+        <p class="cell-muted">All links to learners will be removed. This cannot be undone.</p>
+        <div class="d-flex gap-2 justify-content-center mt-3">
+          <button class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn-lcca btn-lcca-danger-outline" id="confirmDeleteParentBtn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allParents = [];
+let allLearnersForLink = [];
+let parentToDelete = null;
+let currentProfileParentId = null;
+
+const parentModal = new bootstrap.Modal(document.getElementById("parentModal"));
+const parentProfileModal = new bootstrap.Modal(document.getElementById("parentProfileModal"));
+const linkLearnerModal = new bootstrap.Modal(document.getElementById("linkLearnerModal"));
+const deleteParentModal = new bootstrap.Modal(document.getElementById("deleteParentModal"));
+
+function renderParentsTable(parents) {
+  const tbody = document.getElementById("parentsTableBody");
+  const emptyState = document.getElementById("parentsEmptyState");
+
+  if (!parents.length) {
+    tbody.innerHTML = "";
+    emptyState.style.display = "block";
+    emptyState.innerHTML = `<div class="empty-state"><i class="bi bi-people"></i><h4>No parents found</h4><p>Add a parent/guardian record to link them to a learner.</p></div>`;
+    return;
+  }
+  emptyState.style.display = "none";
+
+  tbody.innerHTML = parents.map(p => `
+    <tr>
+      <td><a href="#" class="cell-strong" onclick="viewParentProfile(${p.id}); return false;">${LCCA.escapeHtml(p.full_name)}</a></td>
+      <td class="cell-muted">${LCCA.escapeHtml(p.email || "-")}</td>
+      <td class="cell-muted">${LCCA.escapeHtml(p.phone || "-")}</td>
+      <td class="cell-muted" style="max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${LCCA.escapeHtml(p.address || "-")}</td>
+      <td><span class="badge-status info" id="learnerCount_${p.id}">&hellip;</span></td>
+      <td style="text-align:right; white-space:nowrap;">
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="View" onclick="viewParentProfile(${p.id})"><i class="bi bi-eye"></i></button>
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Edit" onclick="openEditParent(${p.id})"><i class="bi bi-pencil"></i></button>
+        <button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm btn-icon-only" title="Delete" onclick="askDeleteParent(${p.id})"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>
+  `).join("");
+
+  // Lazy-populate learner counts (one detail call each, cached visually)
+  parents.forEach(async (p) => {
+    try {
+      const detail = await LCCA.api.get(`/parents/${p.id}`);
+      const el = document.getElementById(`learnerCount_${p.id}`);
+      if (el) el.textContent = `${detail.learners.length} learner${detail.learners.length === 1 ? "" : "s"}`;
+    } catch (_) { /* ignore */ }
+  });
+}
+
+async function loadParents() {
+  const search = document.getElementById("searchInput").value.trim();
+  let path = "/parents";
+  if (search) path += "?search=" + encodeURIComponent(search);
+  try {
+    allParents = await LCCA.api.get(path);
+    renderParentsTable(allParents);
+  } catch (err) {
+    LCCA.toast("Failed to load parents: " + err.message, "error");
+  }
+}
+document.getElementById("searchInput").addEventListener("input", LCCA.debounce(loadParents, 300));
+
+function openCreateParent() {
+  document.getElementById("parentForm").reset();
+  document.getElementById("parentId").value = "";
+  document.getElementById("parentModalTitle").textContent = "Add Parent / Guardian";
+  parentModal.show();
+}
+
+async function openEditParent(id) {
+  const parent = allParents.find(p => p.id === id) || await LCCA.api.get(`/parents/${id}`);
+  document.getElementById("parentId").value = parent.id;
+  document.getElementById("parentFullName").value = parent.full_name;
+  document.getElementById("parentEmail").value = parent.email || "";
+  document.getElementById("parentPhone").value = parent.phone || "";
+  document.getElementById("parentAddress").value = parent.address || "";
+  document.getElementById("parentEmployerName").value = parent.employer_name || "";
+  document.getElementById("parentPosition").value = parent.position || "";
+  document.getElementById("parentEmployerAddress").value = parent.employer_address || "";
+  document.getElementById("parentEmployerPhone").value = parent.employer_phone || "";
+  document.getElementById("parentModalTitle").textContent = "Edit Parent / Guardian";
+  parentModal.show();
+}
+
+document.getElementById("parentForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("parentId").value;
+  const payload = {
+    full_name: document.getElementById("parentFullName").value.trim(),
+    email: document.getElementById("parentEmail").value.trim() || null,
+    phone: document.getElementById("parentPhone").value.trim() || null,
+    address: document.getElementById("parentAddress").value.trim() || null,
+    employer_name: document.getElementById("parentEmployerName").value.trim() || null,
+    employer_address: document.getElementById("parentEmployerAddress").value.trim() || null,
+    employer_phone: document.getElementById("parentEmployerPhone").value.trim() || null,
+    position: document.getElementById("parentPosition").value.trim() || null,
+  };
+  const btn = document.getElementById("parentSubmitBtn");
+  btn.disabled = true;
+  try {
+    if (id) {
+      await LCCA.api.put(`/parents/${id}`, payload);
+      LCCA.toast("Parent updated successfully.");
+    } else {
+      await LCCA.api.post("/parents", payload);
+      LCCA.toast("Parent added successfully.");
+    }
+    parentModal.hide();
+    loadParents();
+  } catch (err) {
+    LCCA.toast("Failed to save parent: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function askDeleteParent(id) {
+  parentToDelete = id;
+  deleteParentModal.show();
+}
+
+document.getElementById("confirmDeleteParentBtn").addEventListener("click", async () => {
+  if (!parentToDelete) return;
+  try {
+    await LCCA.api.del(`/parents/${parentToDelete}`);
+    LCCA.toast("Parent deleted.");
+    deleteParentModal.hide();
+    loadParents();
+  } catch (err) {
+    LCCA.toast("Failed to delete parent: " + err.message, "error");
+  }
+});
+
+async function viewParentProfile(id) {
+  currentProfileParentId = id;
+  parentProfileModal.show();
+  try {
+    const parent = await LCCA.api.get(`/parents/${id}`);
+    const learnersHtml = parent.learners.length
+      ? parent.learners.map(l => `
+          <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border-soft);">
+            <div>
+              <div class="cell-strong">${LCCA.escapeHtml(l.full_name)} <span class="cell-muted">(${LCCA.escapeHtml(l.relationship_type || "")})</span></div>
+              <div class="cell-muted">${LCCA.escapeHtml(l.learner_code)} &middot; ${LCCA.escapeHtml(l.grade)} - ${LCCA.escapeHtml(l.class_name)}</div>
+            </div>
+            <button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm" onclick="unlinkLearner(${l.relationship_id})">Unlink</button>
+          </div>
+        `).join("")
+      : `<p class="cell-muted">No learners linked yet.</p>`;
+
+    document.getElementById("parentProfileBody").innerHTML = `
+      <div class="profile-header">
+        <div class="avatar-lg">${LCCA.initials(parent.full_name)}</div>
+        <div class="meta">
+          <h2>${LCCA.escapeHtml(parent.full_name)}</h2>
+          <div class="sub">${LCCA.escapeHtml(parent.email || "No email")} &middot; ${LCCA.escapeHtml(parent.phone || "No phone")}</div>
+        </div>
+      </div>
+      <p class="cell-muted">${LCCA.escapeHtml(parent.address || "No address on file")}</p>
+      <div class="row g-3 mt-2">
+        <div class="col-6">
+          <div class="cell-muted">Employer</div>
+          <div class="cell-strong">${LCCA.escapeHtml(parent.employer_name || "No employer on file")}</div>
+        </div>
+        <div class="col-6">
+          <div class="cell-muted">Position</div>
+          <div class="cell-strong">${LCCA.escapeHtml(parent.position || "—")}</div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+        <h4 style="font-size:0.95rem; margin:0;">Linked Learners</h4>
+        <button class="btn-lcca btn-lcca-gold btn-lcca-sm" onclick="openLinkLearner(${parent.id})"><i class="bi bi-link-45deg"></i> Link Learner</button>
+      </div>
+      ${learnersHtml}
+    `;
+  } catch (err) {
+    document.getElementById("parentProfileBody").innerHTML = `<div class="text-danger">Failed to load profile: ${LCCA.escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function openLinkLearner(parentId) {
+  document.getElementById("linkParentId").value = parentId;
+  try {
+    allLearnersForLink = await LCCA.api.get("/learners");
+    const select = document.getElementById("linkLearnerSelect");
+    select.innerHTML = allLearnersForLink.map(l => `<option value="${l.id}">${LCCA.escapeHtml(l.full_name)} (${LCCA.escapeHtml(l.learner_code)})</option>`).join("");
+    linkLearnerModal.show();
+  } catch (err) {
+    LCCA.toast("Failed to load learners: " + err.message, "error");
+  }
+}
+
+document.getElementById("linkLearnerForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const parentId = document.getElementById("linkParentId").value;
+  const payload = {
+    learner_id: parseInt(document.getElementById("linkLearnerSelect").value),
+    relationship_type: document.getElementById("linkRelationshipType").value,
+  };
+  try {
+    await LCCA.api.post(`/parents/${parentId}/link-learner`, payload);
+    LCCA.toast("Learner linked successfully.");
+    linkLearnerModal.hide();
+    viewParentProfile(parentId);
+    loadParents();
+  } catch (err) {
+    LCCA.toast("Failed to link learner: " + err.message, "error");
+  }
+});
+
+async function unlinkLearner(relationshipId) {
+  try {
+    await LCCA.api.del(`/parents/relationships/${relationshipId}`);
+    LCCA.toast("Learner unlinked.");
+    if (currentProfileParentId) viewParentProfile(currentProfileParentId);
+    loadParents();
+  } catch (err) {
+    LCCA.toast("Failed to unlink learner: " + err.message, "error");
+  }
+}
+
+loadParents();
+</script>
+{% endblock %}

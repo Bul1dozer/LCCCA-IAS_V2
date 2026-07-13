@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Data Import{% endblock %}
+{% block page_title %}Data Import{% endblock %}
+{% block page_sub %}Bulk import learners, parents, and payments via CSV or Excel{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <!-- Learners import -->
+  <div class="col-md-4">
+    <div class="lcca-panel h-100">
+      <div class="panel-header"><h3><i class="bi bi-mortarboard-fill text-navy me-2"></i>Import Learners</h3></div>
+      <div class="panel-body">
+        <p class="cell-muted">Upload a CSV or Excel file. Mandatory fees will be auto-assigned on import.</p>
+        <p class="cell-muted" style="font-size:0.8rem;">Required columns: <code>full_name</code>, <code>grade</code>, <code>class_name</code>, <code>date_of_admission</code> (YYYY-MM-DD), <code>status</code></p>
+        <input type="file" class="form-control mb-2" id="learnersFile" accept=".csv,.xlsx,.xls">
+        <div class="d-flex gap-2">
+          <button class="btn-lcca btn-lcca-navy flex-grow-1" onclick="doImport('learners')"><i class="bi bi-upload"></i> Import</button>
+          <a href="/api/imports/template/learners" class="btn-lcca btn-lcca-outline" title="Download Template"><i class="bi bi-download"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parents import -->
+  <div class="col-md-4">
+    <div class="lcca-panel h-100">
+      <div class="panel-header"><h3><i class="bi bi-people-fill text-navy me-2"></i>Import Parents</h3></div>
+      <div class="panel-body">
+        <p class="cell-muted">Upload a CSV or Excel file to bulk-create parent/guardian records.</p>
+        <p class="cell-muted" style="font-size:0.8rem;">Required columns: <code>full_name</code>. Optional: <code>email</code>, <code>phone</code>, <code>address</code></p>
+        <input type="file" class="form-control mb-2" id="parentsFile" accept=".csv,.xlsx,.xls">
+        <div class="d-flex gap-2">
+          <button class="btn-lcca btn-lcca-navy flex-grow-1" onclick="doImport('parents')"><i class="bi bi-upload"></i> Import</button>
+          <a href="/api/imports/template/parents" class="btn-lcca btn-lcca-outline" title="Download Template"><i class="bi bi-download"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payments import -->
+  <div class="col-md-4">
+    <div class="lcca-panel h-100">
+      <div class="panel-header"><h3><i class="bi bi-cash-coin text-navy me-2"></i>Import Payments</h3></div>
+      <div class="panel-body">
+        <p class="cell-muted">Upload a CSV or Excel file to bulk-capture payment records.</p>
+        <p class="cell-muted" style="font-size:0.8rem;">Required: <code>learner_code</code>, <code>amount_paid</code>, <code>date_paid</code> (YYYY-MM-DD), <code>payment_method</code></p>
+        <input type="file" class="form-control mb-2" id="paymentsFile" accept=".csv,.xlsx,.xls">
+        <div class="d-flex gap-2">
+          <button class="btn-lcca btn-lcca-navy flex-grow-1" onclick="doImport('payments')"><i class="bi bi-upload"></i> Import</button>
+          <a href="/api/imports/template/payments" class="btn-lcca btn-lcca-outline" title="Download Template"><i class="bi bi-download"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Result panel -->
+<div class="lcca-panel mb-3" id="importResultPanel" style="display:none;">
+  <div class="panel-header"><h3 id="importResultTitle">Import Result</h3></div>
+  <div class="panel-body" id="importResultBody"></div>
+</div>
+
+<!-- Import job history -->
+<div class="lcca-panel">
+  <div class="panel-header">
+    <h3>Import History</h3>
+    <button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="loadJobs()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+  </div>
+  <div class="panel-body">
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead><tr><th>Type</th><th>Filename</th><th>Total</th><th>Success</th><th>Errors</th><th>By</th><th>Date</th></tr></thead>
+        <tbody id="jobsBody"><tr><td colspan="7"><div class="skeleton" style="height:32px;"></div></td></tr></tbody>
+      </table>
+    </div>
+    <div id="jobsEmpty" style="display:none;"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function doImport(type) {
+  const fileInput = document.getElementById(`${type}File`);
+  if (!fileInput.files.length) {
+    LCCA.toast("Please select a file first.", "error"); return;
+  }
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+
+  const resultPanel = document.getElementById("importResultPanel");
+  const resultBody = document.getElementById("importResultBody");
+  const resultTitle = document.getElementById("importResultTitle");
+
+  resultPanel.style.display = "block";
+  resultBody.innerHTML = `<div class="d-flex align-items-center gap-2"><span class="spinner-border spinner-border-sm"></span> Importing...</div>`;
+
+  try {
+    const res = await fetch(`/api/imports/${type}`, {
+      method: "POST", body: formData, credentials: "same-origin"
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Import failed");
+
+    resultTitle.textContent = `${type.charAt(0).toUpperCase()+type.slice(1)} Import Result`;
+    const errHtml = data.error_report && data.error_report.length
+      ? `<div class="mt-3"><div class="cell-muted mb-1">Row Errors (first 50):</div>
+          <table class="table-lcca"><thead><tr><th>Row</th><th>Error</th></tr></thead><tbody>
+          ${data.error_report.map(e => `<tr><td class="cell-mono">${e.row}</td><td class="cell-muted">${LCCA.escapeHtml(e.error)}</td></tr>`).join("")}
+          </tbody></table></div>`
+      : "";
+
+    resultBody.innerHTML = `
+      <div class="row g-3 mb-2">
+        <div class="col-4"><div class="kpi-card p-3"><div class="kpi-label">Total Rows</div><div class="kpi-value" style="font-size:1.3rem;">${data.total_rows}</div></div></div>
+        <div class="col-4"><div class="kpi-card p-3"><div class="kpi-label">Imported</div><div class="kpi-value" style="font-size:1.3rem;color:var(--success);">${data.success}</div></div></div>
+        <div class="col-4"><div class="kpi-card p-3"><div class="kpi-label">Errors</div><div class="kpi-value" style="font-size:1.3rem;color:${data.errors>0?'var(--danger)':'var(--success)'};">${data.errors}</div></div></div>
+      </div>
+      ${errHtml}
+    `;
+    LCCA.toast(`Import complete: ${data.success} imported, ${data.errors} errors.`, data.errors ? "info" : "success");
+    loadJobs();
+  } catch (err) {
+    resultBody.innerHTML = `<div class="text-danger"><i class="bi bi-exclamation-circle me-2"></i>${LCCA.escapeHtml(err.message)}</div>`;
+    LCCA.toast("Import failed: " + err.message, "error");
+  }
+}
+
+async function loadJobs() {
+  try {
+    const jobs = await LCCA.api.get("/imports/jobs");
+    const tbody = document.getElementById("jobsBody");
+    const empty = document.getElementById("jobsEmpty");
+    if (!jobs.length) {
+      tbody.innerHTML = "";
+      empty.style.display = "block";
+      empty.innerHTML = `<div class="empty-state"><i class="bi bi-upload"></i><h4>No imports yet</h4><p>Upload a file above to get started.</p></div>`;
+      return;
+    }
+    empty.style.display = "none";
+    const typeIcon = {learners:"mortarboard-fill",parents:"people-fill",payments:"cash-coin"};
+    tbody.innerHTML = jobs.map(j => `
+      <tr>
+        <td><i class="bi bi-${typeIcon[j.import_type]||'file'} me-1"></i>${LCCA.escapeHtml(j.import_type)}</td>
+        <td class="cell-muted">${LCCA.escapeHtml(j.filename||"—")}</td>
+        <td>${j.total_rows}</td>
+        <td class="cell-strong" style="color:var(--success);">${j.success_rows}</td>
+        <td class="${j.error_rows>0?'text-danger cell-strong':''}">${j.error_rows}</td>
+        <td class="cell-muted">${LCCA.escapeHtml(j.uploaded_by||"—")}</td>
+        <td class="cell-muted">${LCCA.dateTimeShort(j.started_at)}</td>
+      </tr>
+    `).join("");
+  } catch (err) { LCCA.toast("Failed to load import history: " + err.message, "error"); }
+}
+
+loadJobs();
+</script>
+{% endblock %}

@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Payments{% endblock %}
+{% block page_title %}Payments{% endblock %}
+{% block page_sub %}Capture payments and view payment history{% endblock %}
+{% block topbar_actions %}
+<button class="btn-lcca btn-lcca-gold" onclick="openCreatePayment()">
+  <i class="bi bi-plus-lg"></i> Capture Payment
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="lcca-panel">
+  <div class="panel-body">
+    <div class="table-toolbar">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="text" id="searchInput" placeholder="Search by learner name...">
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead>
+          <tr>
+            <th>Date Paid</th>
+            <th>Learner</th>
+            <th>Amount Paid</th>
+            <th>Method</th>
+            <th>Reference</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="paymentsTableBody">
+          <tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="paymentsEmptyState" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Capture / Edit Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content lcca-modal">
+      <div class="modal-header">
+        <h5 class="modal-title" id="paymentModalTitle">Capture Payment</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="paymentForm">
+        <div class="modal-body">
+          <input type="hidden" id="paymentId">
+          <div class="mb-3">
+            <label class="form-label">Learner</label>
+            <select class="form-select" id="paymentLearner" required></select>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Amount Paid (N$)</label>
+              <input type="number" step="0.01" min="0.01" class="form-control" id="amountPaid" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Date Paid</label>
+              <input type="date" class="form-control" id="datePaid" required>
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Payment Method</label>
+              <select class="form-select" id="paymentMethod">
+                <option>Cash</option>
+                <option>Bank Transfer</option>
+                <option>EFT</option>
+                <option>Card</option>
+                <option>Mobile Money</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Reference Number</label>
+              <input type="text" class="form-control" id="referenceNumber" placeholder="Optional">
+            </div>
+          </div>
+          <div class="mb-1">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="paymentNotes" rows="2" placeholder="Optional"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-lcca btn-lcca-navy" id="paymentSubmitBtn">Save Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deletePaymentModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content lcca-modal">
+      <div class="modal-body text-center py-4">
+        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size:2rem;"></i>
+        <h5 class="mt-3">Delete this payment?</h5>
+        <p class="cell-muted">The learner's outstanding balance will be restored. This cannot be undone.</p>
+        <div class="d-flex gap-2 justify-content-center mt-3">
+          <button class="btn-lcca btn-lcca-outline" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn-lcca btn-lcca-danger-outline" id="confirmDeletePaymentBtn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allPayments = [];
+let learnersCache = [];
+let paymentToDelete = null;
+const paymentModal = new bootstrap.Modal(document.getElementById("paymentModal"));
+const deletePaymentModal = new bootstrap.Modal(document.getElementById("deletePaymentModal"));
+
+async function ensureLearnersLoaded() {
+  if (learnersCache.length) return learnersCache;
+  learnersCache = await LCCA.api.get("/learners");
+  return learnersCache;
+}
+
+function renderPaymentsTable(payments) {
+  const tbody = document.getElementById("paymentsTableBody");
+  const emptyState = document.getElementById("paymentsEmptyState");
+
+  if (!payments.length) {
+    tbody.innerHTML = "";
+    emptyState.style.display = "block";
+    emptyState.innerHTML = `<div class="empty-state"><i class="bi bi-cash-coin"></i><h4>No payments recorded yet</h4><p>Capture a payment to start tracking collections.</p></div>`;
+    return;
+  }
+  emptyState.style.display = "none";
+
+  tbody.innerHTML = payments.map(p => `
+    <tr>
+      <td class="cell-muted">${LCCA.dateShort(p.date_paid)}</td>
+      <td class="cell-strong">${LCCA.escapeHtml(p.learner_name || "Unknown")} <span class="cell-muted">(${LCCA.escapeHtml(p.learner_code || "")})</span></td>
+      <td class="cell-strong">${LCCA.currency(p.amount_paid)}</td>
+      <td><span class="badge-status info">${LCCA.escapeHtml(p.payment_method)}</span></td>
+      <td class="cell-mono">${LCCA.escapeHtml(p.reference_number || "-")}</td>
+      <td style="text-align:right; white-space:nowrap;">
+        <a class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Receipt" href="/api/payments/${p.id}/receipt" target="_blank"><i class="bi bi-receipt"></i></a>
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Edit" onclick="openEditPayment(${p.id})"><i class="bi bi-pencil"></i></button>
+        <button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm btn-icon-only" title="Delete" onclick="askDeletePayment(${p.id})"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function loadPayments() {
+  try {
+    allPayments = await LCCA.api.get("/payments");
+    const search = document.getElementById("searchInput").value.trim().toLowerCase();
+    const filtered = search
+      ? allPayments.filter(p => (p.learner_name || "").toLowerCase().includes(search))
+      : allPayments;
+    renderPaymentsTable(filtered);
+  } catch (err) {
+    LCCA.toast("Failed to load payments: " + err.message, "error");
+  }
+}
+document.getElementById("searchInput").addEventListener("input", LCCA.debounce(loadPayments, 300));
+
+async function openCreatePayment() {
+  document.getElementById("paymentForm").reset();
+  document.getElementById("paymentId").value = "";
+  document.getElementById("paymentModalTitle").textContent = "Capture Payment";
+  document.getElementById("datePaid").valueAsDate = new Date();
+
+  const learners = await ensureLearnersLoaded();
+  const select = document.getElementById("paymentLearner");
+  select.innerHTML = learners.map(l => `<option value="${l.id}">${LCCA.escapeHtml(l.full_name)} (${LCCA.escapeHtml(l.learner_code)}) &mdash; Bal: ${LCCA.currency(l.balance)}</option>`).join("");
+  paymentModal.show();
+}
+
+async function openEditPayment(id) {
+  const payment = allPayments.find(p => p.id === id);
+  if (!payment) return;
+
+  const learners = await ensureLearnersLoaded();
+  const select = document.getElementById("paymentLearner");
+  select.innerHTML = learners.map(l => `<option value="${l.id}">${LCCA.escapeHtml(l.full_name)} (${LCCA.escapeHtml(l.learner_code)})</option>`).join("");
+
+  document.getElementById("paymentId").value = payment.id;
+  select.value = payment.learner_id;
+  document.getElementById("amountPaid").value = payment.amount_paid;
+  document.getElementById("datePaid").value = payment.date_paid;
+  document.getElementById("paymentMethod").value = payment.payment_method;
+  document.getElementById("referenceNumber").value = payment.reference_number || "";
+  document.getElementById("paymentNotes").value = payment.notes || "";
+  document.getElementById("paymentModalTitle").textContent = "Edit Payment";
+  paymentModal.show();
+}
+
+document.getElementById("paymentForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("paymentId").value;
+  const btn = document.getElementById("paymentSubmitBtn");
+  btn.disabled = true;
+
+  try {
+    if (id) {
+      const payload = {
+        amount_paid: parseFloat(document.getElementById("amountPaid").value),
+        date_paid: document.getElementById("datePaid").value,
+        payment_method: document.getElementById("paymentMethod").value,
+        reference_number: document.getElementById("referenceNumber").value.trim() || null,
+        notes: document.getElementById("paymentNotes").value.trim() || null,
+      };
+      await LCCA.api.put(`/payments/${id}`, payload);
+      LCCA.toast("Payment updated successfully.");
+    } else {
+      const payload = {
+        learner_id: parseInt(document.getElementById("paymentLearner").value),
+        amount_paid: parseFloat(document.getElementById("amountPaid").value),
+        date_paid: document.getElementById("datePaid").value,
+        payment_method: document.getElementById("paymentMethod").value,
+        reference_number: document.getElementById("referenceNumber").value.trim() || null,
+        notes: document.getElementById("paymentNotes").value.trim() || null,
+      };
+      await LCCA.api.post("/payments", payload);
+      LCCA.toast("Payment captured successfully.");
+    }
+    learnersCache = []; // invalidate cache so balances refresh
+    paymentModal.hide();
+    loadPayments();
+  } catch (err) {
+    LCCA.toast("Failed to save payment: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function askDeletePayment(id) {
+  paymentToDelete = id;
+  deletePaymentModal.show();
+}
+
+document.getElementById("confirmDeletePaymentBtn").addEventListener("click", async () => {
+  if (!paymentToDelete) return;
+  try {
+    await LCCA.api.del(`/payments/${paymentToDelete}`);
+    LCCA.toast("Payment deleted; balance restored.");
+    learnersCache = [];
+    deletePaymentModal.hide();
+    loadPayments();
+  } catch (err) {
+    LCCA.toast("Failed to delete payment: " + err.message, "error");
+  }
+});
+
+loadPayments();
+</script>
+{% endblock %}

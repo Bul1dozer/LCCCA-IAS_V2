@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+{% block page_sub %}Immutable record of every system action — searchable and non-deletable{% endblock %}
+
+{% block content %}
+<div class="lcca-panel">
+  <div class="panel-body">
+    <div class="table-toolbar mb-2">
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <div class="search-box" style="max-width:200px;">
+          <i class="bi bi-search"></i>
+          <input type="text" id="usernameFilter" placeholder="Filter by user...">
+        </div>
+        <select class="form-select form-select-sm" id="actionFilter" style="width:auto;">
+          <option value="">All Actions</option>
+          <option value="LOGIN">Login</option>
+          <option value="LOGOUT">Logout</option>
+          <option value="CREATE">Create</option>
+          <option value="UPDATE">Update</option>
+          <option value="DELETE">Delete</option>
+          <option value="GENERATE">Generate</option>
+          <option value="SEND">Send</option>
+          <option value="IMPORT">Import</option>
+          <option value="EXPORT">Export</option>
+          <option value="CONFIG">Config</option>
+          <option value="MONTHEND">Month-End</option>
+          <option value="RECON">Reconciliation</option>
+        </select>
+        <select class="form-select form-select-sm" id="resourceFilter" style="width:auto;">
+          <option value="">All Resources</option>
+          <option value="User">User</option>
+          <option value="Learner">Learner</option>
+          <option value="Parent">Parent</option>
+          <option value="Invoice">Invoice</option>
+          <option value="Payment">Payment</option>
+          <option value="FeeItem">Fee Item</option>
+          <option value="LearnerFeeItem">Learner Fee Assignment</option>
+          <option value="MonthEndRun">Month-End Run</option>
+          <option value="SmtpConfig">SMTP Config</option>
+          <option value="SmsConfig">SMS Config</option>
+        </select>
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm" onclick="loadAudit()">
+          <i class="bi bi-search"></i> Search
+        </button>
+        <span class="cell-muted ms-auto" id="auditCount"></span>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table-lcca">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Resource</th>
+            <th>Detail</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody id="auditBody">
+          <tr><td colspan="6"><div class="skeleton" style="height:36px;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="auditEmpty" style="display:none;"></div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3" id="auditPagination" style="display:none!important;">
+      <button class="btn-lcca btn-lcca-outline btn-lcca-sm" id="prevBtn" onclick="changePage(-1)">
+        <i class="bi bi-chevron-left"></i> Previous
+      </button>
+      <span class="cell-muted" id="pageInfo"></span>
+      <button class="btn-lcca btn-lcca-outline btn-lcca-sm" id="nextBtn" onclick="changePage(1)">
+        Next <i class="bi bi-chevron-right"></i>
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const ACTION_COLORS = {
+  LOGIN:"active", LOGOUT:"generated", CREATE:"active", UPDATE:"info",
+  DELETE:"suspended", GENERATE:"info", SEND:"active", IMPORT:"info",
+  EXPORT:"info", CONFIG:"warning", MONTHEND:"info", RECON:"info"
+};
+
+let currentOffset = 0;
+const PAGE_SIZE = 50;
+let totalCount = 0;
+
+async function loadAudit() {
+  currentOffset = 0;
+  await fetchAudit();
+}
+
+async function fetchAudit() {
+  const username = document.getElementById("usernameFilter").value.trim();
+  const action   = document.getElementById("actionFilter").value;
+  const resource = document.getElementById("resourceFilter").value;
+
+  let path = `/audit?limit=${PAGE_SIZE}&offset=${currentOffset}`;
+  if (username) path += `&username=${encodeURIComponent(username)}`;
+  if (action)   path += `&action=${encodeURIComponent(action)}`;
+  if (resource) path += `&resource_type=${encodeURIComponent(resource)}`;
+
+  try {
+    const data = await LCCA.api.get(path);
+    totalCount = data.total;
+    const tbody = document.getElementById("auditBody");
+    const empty = document.getElementById("auditEmpty");
+    const pager = document.getElementById("auditPagination");
+    const count = document.getElementById("auditCount");
+
+    count.textContent = `${totalCount.toLocaleString()} total entries`;
+
+    if (!data.logs.length) {
+      tbody.innerHTML = "";
+      empty.style.display = "block";
+      empty.innerHTML = `<div class="empty-state"><i class="bi bi-shield-check"></i><h4>No audit entries match</h4><p>Try adjusting the filters above.</p></div>`;
+      pager.style.display = "none";
+      return;
+    }
+    empty.style.display = "none";
+    pager.style.display = "flex";
+
+    tbody.innerHTML = data.logs.map(l => `
+      <tr>
+        <td class="cell-muted" style="white-space:nowrap;">${LCCA.dateTimeShort(l.created_at)}</td>
+        <td class="cell-strong">${LCCA.escapeHtml(l.username||"system")}</td>
+        <td><span class="badge-status ${ACTION_COLORS[l.action]||"info"}">${LCCA.escapeHtml(l.action)}</span></td>
+        <td class="cell-muted">${l.resource_type ? `${LCCA.escapeHtml(l.resource_type)}${l.resource_id ? ` #${l.resource_id}` : ""}` : "—"}</td>
+        <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+            title="${LCCA.escapeHtml(l.detail||"")}">${LCCA.escapeHtml(l.detail||"—")}</td>
+        <td class="cell-mono" style="font-size:0.76rem;">${LCCA.escapeHtml(l.ip_address||"—")}</td>
+      </tr>
+    `).join("");
+
+    const page = Math.floor(currentOffset / PAGE_SIZE) + 1;
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    document.getElementById("pageInfo").textContent = `Page ${page} of ${totalPages}`;
+    document.getElementById("prevBtn").disabled = currentOffset === 0;
+    document.getElementById("nextBtn").disabled = currentOffset + PAGE_SIZE >= totalCount;
+
+  } catch (err) {
+    LCCA.toast("Failed to load audit log: " + err.message, "error");
+  }
+}
+
+function changePage(dir) {
+  currentOffset = Math.max(0, currentOffset + dir * PAGE_SIZE);
+  fetchAudit();
+}
+
+// Trigger on Enter in username filter
+document.getElementById("usernameFilter").addEventListener("keydown", e => {
+  if (e.key === "Enter") loadAudit();
+});
+
+loadAudit();
+</script>
+{% endblock %}

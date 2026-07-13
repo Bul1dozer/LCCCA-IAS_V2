@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In | LCCCA-IAS</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/static/css/lcca.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="auth-shell">
+  <div class="auth-art">
+    <div class="crest-wrap">
+     <img src="/static/img/Academy logo + name white.png" alt="LCCA Logo" style="width:250px; height:295px; margin:auto">
+    </div>
+
+    <div class="quote">
+      <blockquote>&ldquo;All your children will be taught by the Lord, and great will be their peace.&rdquo;</blockquote>
+      <cite>Isaiah 54:13</cite>
+    </div>
+
+    <div class="footnote">LCCCA Invoice Automation System &mdash; School Fees Management &amp; Invoicing &copy; 2026</div>
+  </div>
+
+  <div class="auth-form-side">
+    <div class="auth-card">
+      <div class="eyebrow">Administrator Access</div>
+      <h1>Welcome back</h1>
+      <p class="sub">Sign in to manage learners, fees, and invoices.</p>
+
+      <div class="auth-error" id="loginError"></div>
+
+      <form id="loginForm">
+        <div class="lcca-input-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" autocomplete="username" required>
+        </div>
+        <div class="lcca-input-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn-lcca-primary" id="loginBtn">Sign In</button>
+      </form>
+
+      <div class="auth-helper">
+        <strong>Demo credentials</strong> &mdash; Username: <code>admin</code> &middot; Password: <code>admin123</code>
+      </div>
+
+      <div class="auth-helper" style="margin-top:14px;">
+        <strong>Recover access</strong>
+        <form id="passwordResetForm" class="mt-2">
+          <input type="text" id="resetUsername" class="form-control form-control-sm mb-2" placeholder="Username" autocomplete="username">
+          <button type="submit" class="btn-lcca btn-lcca-outline btn-lcca-sm">Request Recovery Token</button>
+        </form>
+        <form id="passwordResetConfirmForm" class="mt-2">
+          <input type="text" id="resetToken" class="form-control form-control-sm mb-2" placeholder="Recovery token">
+          <input type="password" id="resetNewPassword" class="form-control form-control-sm mb-2" placeholder="New password">
+          <button type="submit" class="btn-lcca btn-lcca-gold btn-lcca-sm">Reset Password</button>
+        </form>
+        <div id="resetStatus" class="cell-muted" style="font-size:0.8rem;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const form = document.getElementById("loginForm");
+  const errorBox = document.getElementById("loginError");
+  const btn = document.getElementById("loginBtn");
+  const resetStatus = document.getElementById("resetStatus");
+
+  document.getElementById("passwordResetForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("resetUsername").value.trim();
+    try {
+      const data = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+      }).then(r => r.json());
+      resetStatus.textContent = data.message || "Recovery token issued.";
+    } catch (err) {
+      resetStatus.textContent = err.message;
+    }
+  });
+
+  document.getElementById("passwordResetConfirmForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const token = document.getElementById("resetToken").value.trim();
+    const newPassword = document.getElementById("resetNewPassword").value;
+    try {
+      const data = await fetch("/api/auth/password-reset/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, new_password: newPassword }),
+      }).then(r => r.json());
+      resetStatus.textContent = data.message || "Password updated.";
+    } catch (err) {
+      resetStatus.textContent = err.message;
+    }
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.style.display = "none";
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-lcca"></span> Signing in...';
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Invalid username or password.");
+      }
+
+      window.location.href = "/dashboard";
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "Sign In";
+    }
+  });
+</script>
+</body>
+</html>
