@@ -1,0 +1,67 @@
+# LCCA-IAS v3 — docker-compose.yml
+#
+# Two ways to run this:
+#
+#   1) SQLite (default, zero external dependencies):
+#        docker compose up
+#      Good for a single small school, low concurrent admin users.
+#      IMPORTANT: the app container MUST run with a single worker process
+#      (already enforced in the Dockerfile's CMD) because the in-process
+#      write-serialization lock that protects SQLite from corruption only
+#      works within a single Python process. Do not scale this service to
+#      multiple replicas/workers while using SQLite.
+#
+#   2) PostgreSQL (recommended for production / multiple concurrent staff):
+#        docker compose --profile postgres up
+#      Set DATABASE_URL to the postgres service below. PostgreSQL handles
+#      real concurrent connections and row-level locking natively, so the
+#      app can then be scaled to multiple workers/replicas safely.
+
+services:
+  app:
+    build: .
+    container_name: lcca-ias-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/lcca.db}
+      LCCA_SECRET_KEY: ${LCCA_SECRET_KEY:?Set LCCA_SECRET_KEY in your .env file — see .env.example}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-}
+      SMS_API_KEY: ${SMS_API_KEY:-}
+    volumes:
+      - lcca_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lcca-ias-postgres
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lcca_ias
+      POSTGRES_USER: ${POSTGRES_USER:-lcca}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your .env file}
+    volumes:
+      - lcca_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lcca}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+volumes:
+  lcca_data:
+  lcca_postgres_data:
