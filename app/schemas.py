@@ -1,8 +1,3 @@
-"""
-Pydantic schemas (request / response models) for LCCA-IAS v3.
-All monetary fields use Decimal instead of float.
-"""
-
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
@@ -16,26 +11,19 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-
-class CurrentUser(BaseModel):
-    id: int
-    username: str
-    full_name: str
-    role: str
-
-
-class PasswordChangeRequest(BaseModel):
+class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+    confirm_password: str
 
-
-class PasswordResetRequest(BaseModel):
+class ForgotPasswordRequest(BaseModel):
     username: str
+    email: str
 
-
-class PasswordResetConfirmRequest(BaseModel):
+class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
+    confirm_password: str
 
 
 # ---------------------------------------------------------------------------
@@ -48,24 +36,24 @@ class LearnerBase(BaseModel):
     date_of_admission: date
     status: str = "Active"
     physical_address: Optional[str] = None
-
+    id_number: Optional[str] = None
+    date_of_birth: Optional[date] = None
 
 class LearnerCreate(LearnerBase):
     pass
 
-
 class LearnerUpdate(LearnerBase):
     pass
-
 
 class LearnerOut(LearnerBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     learner_code: str
-    learner_id: Optional[str] = None
     balance: Decimal
     created_at: datetime
-
+    physical_address: Optional[str] = None
+    id_number: Optional[str] = None
+    date_of_birth: Optional[date] = None
 
 class ParentMini(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -75,7 +63,6 @@ class ParentMini(BaseModel):
     phone: Optional[str] = None
     relationship_type: Optional[str] = None
     relationship_id: Optional[int] = None
-
 
 class LearnerDetail(LearnerOut):
     parents: List[ParentMini] = []
@@ -89,25 +76,24 @@ class ParentBase(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    id_number: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    preferred_channel: str = "email"
     employer_name: Optional[str] = None
     employer_address: Optional[str] = None
     employer_phone: Optional[str] = None
-    position: Optional[str] = None
-
+    occupation: Optional[str] = None
 
 class ParentCreate(ParentBase):
     pass
 
-
 class ParentUpdate(ParentBase):
     pass
-
 
 class ParentOut(ParentBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime
-
 
 class LearnerMini(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -119,10 +105,8 @@ class LearnerMini(BaseModel):
     relationship_type: Optional[str] = None
     relationship_id: Optional[int] = None
 
-
 class ParentDetail(ParentOut):
     learners: List[LearnerMini] = []
-
 
 class LinkLearnerRequest(BaseModel):
     learner_id: int
@@ -130,7 +114,7 @@ class LinkLearnerRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Fee Structures (v1 compat)
+# Fee Structures (v1)
 # ---------------------------------------------------------------------------
 class FeeStructureBase(BaseModel):
     name: str
@@ -142,14 +126,11 @@ class FeeStructureBase(BaseModel):
     transport_fee: Decimal = Decimal("0.00")
     misc_charges: Decimal = Decimal("0.00")
 
-
 class FeeStructureCreate(FeeStructureBase):
     pass
 
-
 class FeeStructureUpdate(FeeStructureBase):
     pass
-
 
 class FeeStructureOut(FeeStructureBase):
     model_config = ConfigDict(from_attributes=True)
@@ -171,15 +152,13 @@ class PaymentBase(BaseModel):
 
     @field_validator("amount_paid")
     @classmethod
-    def amount_must_be_positive(cls, v):
+    def amount_positive(cls, v):
         if v <= 0:
             raise ValueError("Payment amount must be greater than zero")
         return v
 
-
 class PaymentCreate(PaymentBase):
     pass
-
 
 class PaymentUpdate(BaseModel):
     amount_paid: Decimal
@@ -190,11 +169,10 @@ class PaymentUpdate(BaseModel):
 
     @field_validator("amount_paid")
     @classmethod
-    def amount_must_be_positive(cls, v):
+    def amount_positive(cls, v):
         if v <= 0:
             raise ValueError("Payment amount must be greater than zero")
         return v
-
 
 class PaymentOut(PaymentBase):
     model_config = ConfigDict(from_attributes=True)
@@ -213,18 +191,21 @@ class InvoiceItemOut(BaseModel):
     id: int
     description: str
     amount: Decimal
-
+    learner_id: Optional[int] = None
+    learner_name: Optional[str] = None
 
 class GenerateInvoiceRequest(BaseModel):
-    learner_id: Optional[int] = None
-    parent_id: Optional[int] = None
+    learner_id: int
     fee_structure_id: Optional[int] = None
     due_date: date
 
+class GenerateParentInvoiceRequest(BaseModel):
+    parent_id: int
+    due_date: date
+    billing_period: Optional[str] = None
 
 class VoidInvoiceRequest(BaseModel):
     reason: str = "Voided by administrator"
-
 
 class InvoiceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -250,11 +231,51 @@ class InvoiceOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Fee Items
+# ---------------------------------------------------------------------------
+class FeeItemBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: str = "other"
+    frequency: str
+    amount: Decimal = Decimal("0.00")
+    is_mandatory: bool = False
+    applicable_grades: Optional[str] = None
+    applicable_classes: Optional[str] = None
+    sort_order: int = 0
+
+class FeeItemCreate(FeeItemBase):
+    pass
+
+class FeeItemUpdate(FeeItemBase):
+    pass
+
+class FeeItemOut(FeeItemBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    is_active: bool
+    created_at: datetime
+
+class AssignFeeItemRequest(BaseModel):
+    fee_item_id: int
+    custom_amount: Optional[Decimal] = None
+
+class LearnerFeeItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    fee_item_id: int
+    fee_item_name: Optional[str] = None
+    custom_amount: Optional[Decimal] = None
+    effective_amount: Optional[Decimal] = None
+    frequency: Optional[str] = None
+    is_active: bool
+
+
+# ---------------------------------------------------------------------------
 # Email Logs
 # ---------------------------------------------------------------------------
 class SendEmailRequest(BaseModel):
     recipient_email: Optional[str] = None
-
 
 class EmailLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -263,29 +284,10 @@ class EmailLogOut(BaseModel):
     recipient_name: Optional[str] = None
     recipient_email: str
     subject: str
-    body_preview: Optional[str] = None
     status: str
     sent_at: datetime
     invoice_number: Optional[str] = None
     learner_name: Optional[str] = None
-
-
-# ---------------------------------------------------------------------------
-# Ledger
-# ---------------------------------------------------------------------------
-class LedgerEntryOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    transaction_type: str
-    reference_type: Optional[str] = None
-    reference_id: Optional[int] = None
-    amount: Decimal
-    dc_indicator: str
-    transaction_date: date
-    created_at: datetime
-    created_by: str
-    notes: Optional[str] = None
-    is_voided: bool
 
 
 # ---------------------------------------------------------------------------
@@ -297,33 +299,26 @@ class DashboardStats(BaseModel):
     total_outstanding_balance: Decimal
     total_payments_received: Decimal
     invoices_generated: int
-    invoices_sent: int
     active_learners: int
     collection_rate: Decimal
-
-
-class ActivityItem(BaseModel):
-    type: str
-    description: str
-    timestamp: datetime
-    icon: str
-
 
 class MonthlyCollection(BaseModel):
     month: str
     total: Decimal
 
-
 class GradeDistribution(BaseModel):
     grade: str
     count: int
 
-
-# ---------------------------------------------------------------------------
-# Reconciliation
-# ---------------------------------------------------------------------------
 class ReconciliationReport(BaseModel):
     ledger_total: Decimal
     cache_total: Decimal
     discrepancy: Decimal
     reconciled: bool
+
+
+# ---------------------------------------------------------------------------
+# Month-End
+# ---------------------------------------------------------------------------
+class TriggerMonthEndRequest(BaseModel):
+    billing_period: Optional[str] = None
