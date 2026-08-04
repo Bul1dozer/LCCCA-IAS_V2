@@ -1,7 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 from .. import models, schemas, auth
 from ..database import get_db
@@ -32,11 +34,44 @@ def _enrich_item(item: models.InvoiceItem, invoice: models.Invoice) -> schemas.I
     )
 
 
+def _primary_parent_for_legacy_invoice(invoice: models.Invoice) -> models.Parent | None:
+    if invoice.parent:
+        return invoice.parent
+    if not invoice.learner:
+        return None
+    relationships = [rel for rel in invoice.learner.relationships_ if rel.parent]
+    primary = next((rel for rel in relationships if rel.is_primary), None)
+    return (primary or relationships[0]).parent if relationships else None
+
+
+def _linked_learner_names(invoice: models.Invoice) -> list[str]:
+    names_by_id = {}
+    if invoice.parent and invoice.parent.relationships_:
+        for rel in invoice.parent.relationships_:
+            if rel.learner:
+                names_by_id[rel.learner.id] = rel.learner.full_name
+    if invoice.learner:
+        names_by_id[invoice.learner.id] = invoice.learner.full_name
+
+    linked = []
+    seen = set()
+    for item in invoice.items:
+        if item.learner_id and item.learner_id not in seen:
+            linked.append(names_by_id.get(item.learner_id, f"Learner #{item.learner_id}"))
+            seen.add(item.learner_id)
+
+    if not linked and invoice.learner:
+        linked.append(invoice.learner.full_name)
+    return linked
+
+
 def _to_out(invoice: models.Invoice) -> schemas.InvoiceOut:
     data = schemas.InvoiceOut.model_validate(invoice).model_dump()
     data["learner_name"] = invoice.learner.full_name if invoice.learner else None
     data["learner_code"] = invoice.learner.learner_code if invoice.learner else None
-    data["parent_name"] = invoice.parent.full_name if invoice.parent else None
+    parent = _primary_parent_for_legacy_invoice(invoice)
+    data["parent_name"] = parent.full_name if parent else None
+    data["linked_learner_names"] = _linked_learner_names(invoice)
     data["items"] = [_enrich_item(i, invoice) for i in invoice.items]
     return schemas.InvoiceOut(**data)
 
@@ -44,6 +79,8 @@ def _to_out(invoice: models.Invoice) -> schemas.InvoiceOut:
 def _load_invoice(invoice_id: int, db: Session):
     return db.query(models.Invoice).options(
         joinedload(models.Invoice.learner),
+        joinedload(models.Invoice.learner).joinedload(models.Learner.relationships_)
+        .joinedload(models.LearnerParentRelationship.parent),
         joinedload(models.Invoice.parent).joinedload(models.Parent.relationships_)
         .joinedload(models.LearnerParentRelationship.learner),
         joinedload(models.Invoice.items),
@@ -54,17 +91,33 @@ def _load_invoice(invoice_id: int, db: Session):
 def list_invoices(
     learner_id: int | None = None,
     parent_id: int | None = None,
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(models.Invoice).options(
         joinedload(models.Invoice.learner),
+        joinedload(models.Invoice.learner).joinedload(models.Learner.relationships_)
+        .joinedload(models.LearnerParentRelationship.parent),
         joinedload(models.Invoice.parent),
+        joinedload(models.Invoice.parent).joinedload(models.Parent.relationships_)
+        .joinedload(models.LearnerParentRelationship.learner),
         joinedload(models.Invoice.items),
     )
     if learner_id:
         q = q.filter(models.Invoice.learner_id == learner_id)
     if parent_id:
         q = q.filter(models.Invoice.parent_id == parent_id)
+    if search:
+        like = f"%{search}%"
+        q = (
+            q.outerjoin(models.Invoice.parent)
+            .outerjoin(models.Invoice.learner)
+            .filter(or_(
+                models.Invoice.invoice_number.ilike(like),
+                models.Parent.full_name.ilike(like),
+                models.Learner.full_name.ilike(like),
+            ))
+        )
     return [_to_out(i) for i in q.order_by(models.Invoice.created_at.desc()).all()]
 
 

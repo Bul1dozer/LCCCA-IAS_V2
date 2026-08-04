@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Invoices{% endblock %}
 {% block page_title %}Invoices{% endblock %}
-{% block page_sub %}Generate, preview, download, and send learner invoices{% endblock %}
+{% block page_sub %}Generate, preview, download, and send parent and learner invoices{% endblock %}
 {% block topbar_actions %}
 <button class="btn-lcca btn-lcca-gold" onclick="openGenerateInvoice()">
   <i class="bi bi-file-earmark-plus"></i> Generate Invoice
@@ -14,7 +14,7 @@
     <div class="table-toolbar">
       <div class="search-box">
         <i class="bi bi-search"></i>
-        <input type="text" id="searchInput" placeholder="Search by learner name or invoice number...">
+        <input type="text" id="searchInput" placeholder="Search by parent name or invoice number...">
       </div>
       <select class="form-select form-select-sm" id="statusFilter" style="width:auto;">
         <option value="">All Statuses</option>
@@ -27,18 +27,22 @@
       <table class="table-lcca">
         <thead>
           <tr>
-            <th>Invoice #</th>
-            <th>Learner</th>
+            <th>Invoice Number</th>
+            <th>Parent</th>
+            <th>Linked Learners</th>
+            <th>Billing Period</th>
             <th>Issue Date</th>
             <th>Due Date</th>
-            <th>Charges</th>
-            <th>Outstanding</th>
+            <th>Current Charges</th>
+            <th>Previous Balance</th>
+            <th>Payments</th>
+            <th>Outstanding Balance</th>
             <th>Status</th>
             <th style="text-align:right;">Actions</th>
           </tr>
         </thead>
         <tbody id="invoicesTableBody">
-          <tr><td colspan="8"><div class="skeleton" style="height:40px;"></div></td></tr>
+          <tr><td colspan="12"><div class="skeleton" style="height:40px;"></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -139,6 +143,7 @@
 <script>
 let allInvoices = [];
 let invoiceToDelete = null;
+let expandedInvoiceIds = new Set();
 const generateModal = new bootstrap.Modal(document.getElementById("generateModal"));
 const sendEmailModal = new bootstrap.Modal(document.getElementById("sendEmailModal"));
 const deleteInvoiceModal = new bootstrap.Modal(document.getElementById("deleteInvoiceModal"));
@@ -155,23 +160,83 @@ function renderInvoicesTable(invoices) {
   }
   emptyState.style.display = "none";
 
-  tbody.innerHTML = invoices.map(inv => `
+  tbody.innerHTML = invoices.map(inv => {
+    const linkedLearners = linkedLearnerDisplay(inv);
+    const billingParty = billingPartyDisplay(inv);
+    const isExpanded = expandedInvoiceIds.has(inv.id);
+    return `
     <tr>
       <td class="cell-mono">${LCCA.escapeHtml(inv.invoice_number)}</td>
-      <td class="cell-strong">${LCCA.escapeHtml(inv.parent_name || inv.learner_name || "Unknown")} <span class="cell-muted">(${LCCA.escapeHtml(inv.learner_code || "")})</span></td>
+      <td class="cell-strong">${LCCA.escapeHtml(billingParty)}</td>
+      <td>${LCCA.escapeHtml(linkedLearners)}</td>
+      <td class="cell-muted">${LCCA.escapeHtml(inv.billing_period || "-")}</td>
       <td class="cell-muted">${LCCA.dateShort(inv.issue_date)}</td>
       <td class="cell-muted">${LCCA.dateShort(inv.due_date)}</td>
       <td>${LCCA.currency(inv.current_charges)}</td>
+      <td>${LCCA.currency(inv.previous_balance)}</td>
+      <td>${LCCA.currency(inv.payments_made)}</td>
       <td class="cell-strong">${LCCA.currency(inv.outstanding_balance)}</td>
       <td><span class="badge-status ${inv.status.toLowerCase()}">${inv.status}</span></td>
       <td style="text-align:right; white-space:nowrap;">
+        <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="${isExpanded ? "Hide line items" : "Show line items"}" onclick="toggleInvoiceItems(${inv.id})"><i class="bi ${isExpanded ? "bi-chevron-up" : "bi-chevron-down"}"></i></button>
         <a class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Preview" href="/api/invoices/${inv.id}/preview" target="_blank"><i class="bi bi-eye"></i></a>
         <a class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Download PDF" href="/api/invoices/${inv.id}/pdf"><i class="bi bi-download"></i></a>
         <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="Send Email" onclick="openSendEmail(${inv.id})"><i class="bi bi-envelope"></i></button>
         <button class="btn-lcca btn-lcca-danger-outline btn-lcca-sm btn-icon-only" title="Delete" onclick="askDeleteInvoice(${inv.id})"><i class="bi bi-trash"></i></button>
       </td>
     </tr>
-  `).join("");
+    ${isExpanded ? renderInvoiceItemRow(inv) : ""}
+  `;
+  }).join("");
+}
+
+function billingPartyDisplay(inv) {
+  return inv.parent_name || "Legacy learner invoice";
+}
+
+function linkedLearnerDisplay(inv) {
+  if (Array.isArray(inv.linked_learner_names) && inv.linked_learner_names.length) {
+    return inv.linked_learner_names.join(", ");
+  }
+  return inv.learner_name || "-";
+}
+
+function renderInvoiceItemRow(inv) {
+  const items = Array.isArray(inv.items) ? inv.items : [];
+  const rows = items.length ? items.map(item => `
+    <tr>
+      <td class="cell-muted">${LCCA.escapeHtml(item.learner_name || linkedLearnerDisplay(inv))}</td>
+      <td>${LCCA.escapeHtml(item.description)}</td>
+      <td style="text-align:right;">${LCCA.currency(item.amount)}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="3" class="cell-muted">No line items recorded.</td></tr>`;
+  return `
+    <tr class="invoice-items-row">
+      <td colspan="12">
+        <div class="table-responsive">
+          <table class="table-lcca" style="margin:0;">
+            <thead>
+              <tr>
+                <th>Learner</th>
+                <th>Line Item</th>
+                <th style="text-align:right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function toggleInvoiceItems(invoiceId) {
+  if (expandedInvoiceIds.has(invoiceId)) {
+    expandedInvoiceIds.delete(invoiceId);
+  } else {
+    expandedInvoiceIds.add(invoiceId);
+  }
+  applyFilters();
 }
 
 async function loadInvoices() {
@@ -189,7 +254,7 @@ function applyFilters() {
   let filtered = allInvoices;
   if (search) {
     filtered = filtered.filter(i =>
-      (i.learner_name || "").toLowerCase().includes(search) ||
+      (i.parent_name || "").toLowerCase().includes(search) ||
       (i.invoice_number || "").toLowerCase().includes(search)
     );
   }

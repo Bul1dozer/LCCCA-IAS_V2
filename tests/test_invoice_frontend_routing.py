@@ -72,6 +72,56 @@ def test_successful_parent_generation_displays_combined_invoice_message():
     assert "learner_count" in message_function
 
 
+def test_invoice_table_is_parent_centred_with_linked_learners_column():
+    assert "<th>Invoice Number</th>" in INVOICES_TEMPLATE
+    assert "<th>Parent</th>" in INVOICES_TEMPLATE
+    assert "<th>Linked Learners</th>" in INVOICES_TEMPLATE
+    assert "<th>Billing Period</th>" in INVOICES_TEMPLATE
+    assert "<th>Current Charges</th>" in INVOICES_TEMPLATE
+    assert "<th>Previous Balance</th>" in INVOICES_TEMPLATE
+    assert "<th>Payments</th>" in INVOICES_TEMPLATE
+    assert "<th>Outstanding Balance</th>" in INVOICES_TEMPLATE
+    assert "<th>Learner</th>" not in _between(
+        INVOICES_TEMPLATE,
+        "<table class=\"table-lcca\">",
+        "</thead>",
+    )
+
+
+def test_invoice_table_expands_learner_specific_line_items():
+    assert "function toggleInvoiceItems(invoiceId)" in INVOICES_TEMPLATE
+    assert "function renderInvoiceItemRow(inv)" in INVOICES_TEMPLATE
+    assert "<th>Learner</th>" in _between(
+        INVOICES_TEMPLATE,
+        "function renderInvoiceItemRow(inv)",
+        "function toggleInvoiceItems",
+    )
+    assert "item.learner_name" in INVOICES_TEMPLATE
+    assert "item.description" in INVOICES_TEMPLATE
+    assert "item.amount" in INVOICES_TEMPLATE
+
+
+def test_invoice_search_targets_parent_name_and_invoice_number():
+    search_filter = _between(
+        INVOICES_TEMPLATE,
+        "if (search) {",
+        "if (status)",
+    )
+
+    assert "(i.parent_name || \"\").toLowerCase().includes(search)" in search_filter
+    assert "(i.invoice_number || \"\").toLowerCase().includes(search)" in search_filter
+    assert "(i.learner_name || \"\").toLowerCase().includes(search)" not in search_filter
+    assert "Search by parent name or invoice number" in INVOICES_TEMPLATE
+
+
+def test_invoice_table_uses_parent_and_legacy_fallback_display_helpers():
+    assert "function billingPartyDisplay(inv)" in INVOICES_TEMPLATE
+    assert 'return inv.parent_name || "Legacy learner invoice";' in INVOICES_TEMPLATE
+    assert "function linkedLearnerDisplay(inv)" in INVOICES_TEMPLATE
+    assert "inv.linked_learner_names.join" in INVOICES_TEMPLATE
+    assert "inv.learner_name || \"-\"" in INVOICES_TEMPLATE
+
+
 def test_api_validation_errors_are_formatted_for_people():
     assert "function formatApiErrorDetail(detail)" in COMMON_JS
     assert 'item.loc.filter((part) => part !== "body").join(".")' in COMMON_JS

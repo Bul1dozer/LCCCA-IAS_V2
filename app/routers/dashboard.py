@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -29,6 +30,7 @@ def get_stats(db: Session = Depends(get_db)):
     invoices_gen = db.query(models.Invoice).filter(
         models.Invoice.status.notin_(["Void", "Reversed"])
     ).count()
+    invoices_sent = db.query(models.EmailLog).filter(models.EmailLog.status == "Sent").count()
     total_charged = db.execute(text("""
         SELECT COALESCE(SUM(current_charges),0) FROM invoices
         WHERE status NOT IN ('Void','Reversed')
@@ -42,14 +44,54 @@ def get_stats(db: Session = Depends(get_db)):
         total_learners=total, total_parents=parents,
         total_outstanding_balance=quantize(outstanding),
         total_payments_received=quantize(total_paid),
-        invoices_generated=invoices_gen, active_learners=active,
+        invoices_generated=invoices_gen, invoices_sent=invoices_sent, active_learners=active,
         collection_rate=coll_rate,
     )
 
 
+@router.get("/activity", response_model=list[schemas.DashboardActivity])
+def activity(limit: int = 12, db: Session = Depends(get_db)):
+    items = []
+
+    for audit in db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(limit).all():
+        resource = audit.resource_type or "record"
+        detail = f"{audit.username} {audit.action.lower()} {resource.lower()}"
+        if audit.resource_id:
+            detail += f" #{audit.resource_id}"
+        items.append({
+            "description": audit.detail or detail,
+            "timestamp": audit.created_at,
+            "icon": "shield-check",
+        })
+
+    for invoice in db.query(models.Invoice).order_by(models.Invoice.created_at.desc()).limit(limit).all():
+        items.append({
+            "description": f"Invoice {invoice.invoice_number} generated",
+            "timestamp": invoice.created_at,
+            "icon": "file-earmark-text",
+        })
+
+    for payment in db.query(models.Payment).order_by(models.Payment.created_at.desc()).limit(limit).all():
+        learner = payment.learner.full_name if payment.learner else "learner"
+        items.append({
+            "description": f"Payment of N${quantize(payment.amount_paid)} recorded for {learner}",
+            "timestamp": payment.created_at,
+            "icon": "cash-coin",
+        })
+
+    for learner in db.query(models.Learner).order_by(models.Learner.created_at.desc()).limit(limit).all():
+        items.append({
+            "description": f"Learner {learner.full_name} added",
+            "timestamp": learner.created_at,
+            "icon": "person-plus",
+        })
+
+    items.sort(key=lambda item: item["timestamp"] or datetime.min, reverse=True)
+    return items[: max(1, min(limit, 50))]
+
+
 @router.get("/collections-chart", response_model=list[schemas.MonthlyCollection])
 def collections_chart(months: int = 6, db: Session = Depends(get_db)):
-    from datetime import datetime
     today = datetime.utcnow()
     labels = []
     for i in range(months - 1, -1, -1):

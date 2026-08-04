@@ -224,10 +224,12 @@ class InvoiceOut(BaseModel):
     payments_made: Decimal
     outstanding_balance: Decimal
     status: str
+    billing_period: Optional[str] = None
     created_at: datetime
     learner_name: Optional[str] = None
     learner_code: Optional[str] = None
     parent_name: Optional[str] = None
+    linked_learner_names: List[str] = []
     items: List[InvoiceItemOut] = []
     voided_at: Optional[datetime] = None
     void_reason: Optional[str] = None
