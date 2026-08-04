@@ -1,0 +1,35 @@
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.vendored/
+
+# Local databases and disposable test data
+*.db
+*.sqlite
+*.sqlite3
+.pytest_tmp/
+tmp/
+/tmp/
+
+# Logs and runtime artifacts
+*.log
+logs/
+test-results/
+coverage/
+htmlcov/
+.coverage
+
+# Generated local assets
+generated_qr/
+qr_codes/
+
+# OS/editor noise
+.DS_Store
