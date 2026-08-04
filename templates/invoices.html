@@ -71,9 +71,13 @@
             <label class="form-label">Parent</label>
             <select class="form-select" id="genParent"></select>
           </div>
-          <div class="mb-3">
+          <div class="mb-3" id="genFeeStructureWrap">
             <label class="form-label">Fee Structure</label>
             <select class="form-select" id="genFeeStructure"></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Billing Period</label>
+            <input type="month" class="form-control" id="genBillingPeriod" required>
           </div>
           <div class="mb-1">
             <label class="form-label">Due Date</label>
@@ -200,6 +204,8 @@ async function openGenerateInvoice() {
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 30);
   document.getElementById("genDueDate").valueAsDate = dueDate;
+  document.getElementById("genBillingPeriod").value = dueDate.toISOString().slice(0, 7);
+  setInvoiceScope("learner");
 
   try {
     const [learners, parents, fees] = await Promise.all([
@@ -207,13 +213,13 @@ async function openGenerateInvoice() {
       LCCA.api.get("/parents"),
       LCCA.api.get("/fee-structures"),
     ]);
-    document.getElementById("genLearner").innerHTML = learners.map(l =>
+    document.getElementById("genLearner").innerHTML = `<option value="">Select learner...</option>` + learners.map(l =>
       `<option value="${l.id}">${LCCA.escapeHtml(l.full_name)} (${LCCA.escapeHtml(l.learner_code)}) &mdash; ${LCCA.escapeHtml(l.grade)}</option>`
     ).join("");
-    document.getElementById("genParent").innerHTML = parents.map(p =>
+    document.getElementById("genParent").innerHTML = `<option value="">Select parent...</option>` + parents.map(p =>
       `<option value="${p.id}">${LCCA.escapeHtml(p.full_name)}</option>`
     ).join("");
-    document.getElementById("genFeeStructure").innerHTML = fees.map(f =>
+    document.getElementById("genFeeStructure").innerHTML = `<option value="">Use assigned fee profile</option>` + fees.map(f =>
       `<option value="${f.id}">${LCCA.escapeHtml(f.name)} &mdash; ${LCCA.escapeHtml(f.grade)} (${LCCA.currency(f.total)})</option>`
     ).join("");
     generateModal.show();
@@ -222,26 +228,81 @@ async function openGenerateInvoice() {
   }
 }
 
-document.getElementById("genScope").addEventListener("change", () => {
-  const scope = document.getElementById("genScope").value;
+function setInvoiceScope(scope) {
+  document.getElementById("genScope").value = scope;
   document.getElementById("genLearnerWrap").style.display = scope === "learner" ? "block" : "none";
   document.getElementById("genParentWrap").style.display = scope === "parent" ? "block" : "none";
+  document.getElementById("genFeeStructureWrap").style.display = scope === "learner" ? "block" : "none";
+  if (scope === "parent") {
+    document.getElementById("genLearner").value = "";
+    document.getElementById("genFeeStructure").value = "";
+  } else {
+    document.getElementById("genParent").value = "";
+  }
+}
+
+function requireSelectedInt(elementId, label) {
+  const value = document.getElementById(elementId).value;
+  const parsed = parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} is required.`);
+  }
+  return parsed;
+}
+
+function buildGenerateInvoiceRequest() {
+  const scope = document.getElementById("genScope").value;
+  const dueDate = document.getElementById("genDueDate").value;
+  const billingPeriod = document.getElementById("genBillingPeriod").value;
+  if (!dueDate) throw new Error("Due date is required.");
+  if (!billingPeriod) throw new Error("Billing period is required.");
+
+  if (scope === "parent") {
+    const parentId = requireSelectedInt("genParent", "Parent");
+    return {
+      endpoint: `/parents/${parentId}/generate-invoice`,
+      payload: { parent_id: parentId, due_date: dueDate, billing_period: billingPeriod },
+      scope,
+    };
+  }
+
+  const learnerId = requireSelectedInt("genLearner", "Learner");
+  const feeStructureValue = document.getElementById("genFeeStructure").value;
+  const payload = { learner_id: learnerId, due_date: dueDate };
+  if (feeStructureValue) payload.fee_structure_id = parseInt(feeStructureValue, 10);
+  return {
+    endpoint: "/invoices/generate",
+    payload,
+    scope: "learner",
+  };
+}
+
+function invoiceSuccessMessage(invoice, scope) {
+  if (scope === "parent") {
+    return `Combined invoice ${invoice.invoice_number} generated for ${invoice.learner_count || 0} learner(s).`;
+  }
+  return `Invoice ${invoice.invoice_number} generated successfully.`;
+}
+
+document.getElementById("genScope").addEventListener("change", (event) => {
+  setInvoiceScope(event.target.value);
 });
 
 document.getElementById("generateForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const scope = document.getElementById("genScope").value;
-  const payload = {
-    learner_id: scope === "learner" ? parseInt(document.getElementById("genLearner").value) : null,
-    parent_id: scope === "parent" ? parseInt(document.getElementById("genParent").value) : null,
-    fee_structure_id: parseInt(document.getElementById("genFeeStructure").value),
-    due_date: document.getElementById("genDueDate").value,
-  };
   const btn = document.getElementById("generateSubmitBtn");
+  if (btn.disabled) return;
+  let requestConfig;
+  try {
+    requestConfig = buildGenerateInvoiceRequest();
+  } catch (err) {
+    LCCA.toast(err.message, "error");
+    return;
+  }
   btn.disabled = true;
   try {
-    const invoice = await LCCA.api.post("/invoices/generate", payload);
-    LCCA.toast(`Invoice ${invoice.invoice_number} generated successfully.`);
+    const invoice = await LCCA.api.post(requestConfig.endpoint, requestConfig.payload);
+    LCCA.toast(invoiceSuccessMessage(invoice, requestConfig.scope));
     generateModal.hide();
     loadInvoices();
   } catch (err) {

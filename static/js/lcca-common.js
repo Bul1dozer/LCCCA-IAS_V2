@@ -6,12 +6,26 @@
 const LCCA = (() => {
   const API_BASE = "/api";
 
+  function cookieValue(name) {
+    return document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${name}=`))
+      ?.split("=")
+      .slice(1)
+      .join("=") || "";
+  }
+
   async function request(method, path, body) {
     const opts = {
       method,
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
     };
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+      const csrf = cookieValue("lcca_csrf");
+      if (csrf) opts.headers["X-CSRF-Token"] = decodeURIComponent(csrf);
+    }
     if (body !== undefined) opts.body = JSON.stringify(body);
 
     const res = await fetch(`${API_BASE}${path}`, opts);
@@ -25,7 +39,7 @@ const LCCA = (() => {
       let detail = `Request failed (${res.status})`;
       try {
         const data = await res.json();
-        if (data.detail) detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+        if (data.detail) detail = formatApiErrorDetail(data.detail);
       } catch (_) { /* ignore parse errors */ }
       throw new Error(detail);
     }
@@ -34,6 +48,23 @@ const LCCA = (() => {
     const contentType = res.headers.get("content-type") || "";
     if (contentType.includes("application/json")) return res.json();
     return res;
+  }
+
+  function formatApiErrorDetail(detail) {
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((item) => {
+        if (item && typeof item === "object") {
+          const field = Array.isArray(item.loc) ? item.loc.filter((part) => part !== "body").join(".") : "";
+          return field ? `${field}: ${item.msg || "Invalid value"}` : (item.msg || "Invalid value");
+        }
+        return String(item);
+      }).join("; ");
+    }
+    if (detail && typeof detail === "object") {
+      return Object.entries(detail).map(([key, value]) => `${key}: ${value}`).join("; ");
+    }
+    return String(detail);
   }
 
   const api = {
@@ -195,5 +226,5 @@ const LCCA = (() => {
     initLogout();
   });
 
-  return { api, currency, dateShort, dateTimeShort, timeAgo, escapeHtml, initials, toast, debounce };
+  return { api, currency, dateShort, dateTimeShort, timeAgo, escapeHtml, initials, toast, debounce, formatApiErrorDetail };
 })();
