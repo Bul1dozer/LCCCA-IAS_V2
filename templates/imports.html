@@ -80,6 +80,12 @@
 
 {% block extra_scripts %}
 <script>
+function csrfHeaders() {
+  const token = document.cookie.split(";").map((part) => part.trim())
+    .find((part) => part.startsWith("lcca_csrf="))?.split("=").slice(1).join("=") || "";
+  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+}
+
 async function doImport(type) {
   const fileInput = document.getElementById(`${type}File`);
   if (!fileInput.files.length) {
@@ -97,7 +103,7 @@ async function doImport(type) {
 
   try {
     const res = await fetch(`/api/imports/${type}`, {
-      method: "POST", body: formData, credentials: "same-origin"
+      method: "POST", body: formData, credentials: "same-origin", headers: csrfHeaders()
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Import failed");

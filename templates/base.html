@@ -109,6 +109,34 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function installCsrfFetchGuard() {
+  function cookieValue(name) {
+    return document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${name}=`))
+      ?.split("=")
+      .slice(1)
+      .join("=") || "";
+  }
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const url = typeof input === "string" ? input : input.url;
+    const method = (init.method || "GET").toUpperCase();
+    const sameOriginApi = url && (url.startsWith("/api/") || url.startsWith(`${window.location.origin}/api/`));
+    if (sameOriginApi && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+      const headers = new Headers(init.headers || {});
+      if (!headers.has("X-CSRF-Token")) {
+        const token = cookieValue("lcca_csrf");
+        if (token) headers.set("X-CSRF-Token", decodeURIComponent(token));
+      }
+      init = { ...init, headers };
+    }
+    return originalFetch(input, init);
+  };
+})();
+</script>
 <script src="/static/js/lcca-common.js"></script>
 {% block extra_scripts %}{% endblock %}
 </body>

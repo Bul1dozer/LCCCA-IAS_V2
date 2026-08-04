@@ -24,6 +24,8 @@ httpx==0.28.1
 
 # Security
 passlib[bcrypt]==1.7.4
+cryptography>=42.0.0,<47.0.0
+redis>=5.0.0,<6.0.0
 
 # Two-factor authentication (TOTP)
 pyotp==2.10.0
