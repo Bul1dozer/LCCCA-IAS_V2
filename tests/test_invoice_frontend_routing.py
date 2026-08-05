@@ -30,7 +30,7 @@ def test_learner_invoice_mode_requires_learner_and_calls_learner_endpoint():
         "function invoiceSuccessMessage",
     )
 
-    assert 'const payload = { learner_id: learnerId, due_date: dueDate };' in learner_branch
+    assert 'const payload = { learner_id: learnerId, due_date: dueDate, billing_period: billingPeriod };' in learner_branch
     assert 'endpoint: "/invoices/generate"' in learner_branch
     assert "fee_structure_id" in learner_branch
 

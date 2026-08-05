@@ -34,9 +34,9 @@ DARK_GREY = colors.HexColor("#444444")
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "img", "logo.png")
 
 SCHOOL_NAME = "Life Changing Christian Church Academy"
-SCHOOL_TAGLINE = "Nurturing Minds, Building Character, Honoring God"
-SCHOOL_ADDRESS = "12 Faith Avenue, Windhoek, Namibia | Tel: +264 61 123 4567"
-SCHOOL_EMAIL = "accounts@lcca.edu.na"
+SCHOOL_TAGLINE = "Raising godly Champions"
+SCHOOL_ADDRESS = "Invokavit Str, Gemeente 1, Katutura, Windhoek, Namibia | Tel: 081 749 6077 / 085 551 5495"
+SCHOOL_EMAIL = "info@lcccacademy.com"
 
 styles = getSampleStyleSheet()
 
@@ -140,13 +140,27 @@ def build_invoice_pdf(invoice, learner, parents, items) -> bytes:
     elements = _header_block(f"INVOICE #{invoice.invoice_number}")
 
     # Invoice meta + learner / parent info side by side
-    learner_info = [
-        Paragraph("<b>Learner Information</b>", normal_style),
-        Paragraph(f"Name: {learner.full_name}", normal_style),
-        Paragraph(f"Learner ID: {learner.learner_code}", normal_style),
-        Paragraph(f"Grade / Class: {learner.grade} - {learner.class_name}", normal_style),
-        Paragraph(f"Status: {learner.status}", normal_style),
-    ]
+    if learner:
+        learner_info = [
+            Paragraph("<b>Learner Information</b>", normal_style),
+            Paragraph(f"Name: {learner.full_name}", normal_style),
+            Paragraph(f"Learner ID: {learner.learner_code}", normal_style),
+            Paragraph(f"Grade / Class: {learner.grade} - {learner.class_name}", normal_style),
+            Paragraph(f"Status: {learner.status}", normal_style),
+        ]
+    else:
+        linked_names = []
+        if getattr(invoice, "parent", None):
+            item_learner_ids = {item.learner_id for item in items if item.learner_id}
+            for rel in invoice.parent.relationships_:
+                if rel.learner and (not item_learner_ids or rel.learner.id in item_learner_ids):
+                    linked_names.append(rel.learner.full_name)
+        learner_info = [
+            Paragraph("<b>Billing Scope</b>", normal_style),
+            Paragraph("Parent aggregated invoice", normal_style),
+            Paragraph(f"Linked Learners: {', '.join(linked_names) if linked_names else 'See line items'}", normal_style),
+            Paragraph(f"Billing Period: {invoice.billing_period or 'N/A'}", normal_style),
+        ]
 
     if parents:
         parent_lines = ["<b>Parent / Guardian Information</b>"]
@@ -230,7 +244,7 @@ def build_invoice_pdf(invoice, learner, parents, items) -> bytes:
     elements.append(Paragraph(
         f"<b>Payment Due Date: {_fmt_date(invoice.due_date)}</b> &mdash; "
         f"Kindly settle outstanding balances on or before the due date. "
-        f"Please use Learner ID <b>{learner.learner_code}</b> as your payment reference.",
+        f"Please use <b>{learner.learner_code if learner else invoice.invoice_number}</b> as your payment reference.",
         normal_style,
     ))
 

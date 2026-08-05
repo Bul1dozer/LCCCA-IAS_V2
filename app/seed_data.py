@@ -26,22 +26,23 @@ def seed(db: Session):
     if not db.query(models.InvoiceCounter).first():
         db.add(models.InvoiceCounter(id=1, year=year, last_sequence=0))
 
-    # Fee Catalogue — 14 items covering all grades
+    # Fee Catalogue - 2027 published LCCCA Academy fees.
     fee_items = [
-        ("Tuition Fee — Primary (Grade 0-7)",   "tuition",      "monthly", 1500.00, True,  "Grade 0,Grade 1,Grade 2,Grade 3,Grade 4,Grade 5,Grade 6,Grade 7"),
-        ("Tuition Fee — Secondary (Grade 8-10)", "tuition",      "monthly", 2000.00, True,  "Grade 8,Grade 9,Grade 10"),
-        ("Tuition Fee — Pre-Primary",            "tuition",      "monthly",  900.00, True,  "Baby Class,Toddler Class"),
-        ("Development Levy",                     "other",        "monthly",  250.00, True,  None),
-        ("Activity Fee",                         "activity",     "monthly",  150.00, False, None),
-        ("Aftercare (Grade 0-4)",                "aftercare",    "monthly",  600.00, False, "Grade 0,Grade 1,Grade 2,Grade 3,Grade 4"),
-        ("Hostel Fee",                           "hostel",       "monthly", 2500.00, False, None),
-        ("Transport Fee — Zone A",               "transport",    "monthly",  400.00, False, None),
-        ("Transport Fee — Zone B",               "transport",    "monthly",  550.00, False, None),
-        ("Annual Registration",                  "registration", "annual",   500.00, False, None),
-        ("Sport Levy",                           "sport",        "term",     300.00, False, None),
-        ("Material Fee",                         "material",     "annual",   200.00, False, None),
-        ("NSSCO Exam Fee (Grade 10)",            "other",        "once_off", 800.00, False, "Grade 10"),
-        ("Grade 12 Farewell Contribution",       "event",        "once_off", 350.00, False, "Grade 10"),
+        ("Registration Fee - Babies Academy", "registration", "annual", 500.00, True, "Baby Class"),
+        ("Tuition Fee - Babies Academy", "tuition", "monthly", 1838.00, True, "Baby Class"),
+        ("Registration Fee - Toddler Academy", "registration", "annual", 500.00, True, "Toddler Class"),
+        ("Tuition Fee - Toddler Academy", "tuition", "monthly", 1475.00, True, "Toddler Class"),
+        ("Registration Fee - Grade 0-7", "registration", "annual", 850.00, True, "Grade 0,Grade 1,Grade 2,Grade 3,Grade 4,Grade 5,Grade 6,Grade 7"),
+        ("Tuition Fee - Grade 0-7", "tuition", "monthly", 1838.00, True, "Grade 0,Grade 1,Grade 2,Grade 3,Grade 4,Grade 5,Grade 6,Grade 7"),
+        ("Sports & Culture - Grade 0-7", "sport", "monthly", 50.00, True, "Grade 0,Grade 1,Grade 2,Grade 3,Grade 4,Grade 5,Grade 6,Grade 7"),
+        ("Registration Fee - Grade 8-10", "registration", "annual", 1580.00, True, "Grade 8,Grade 9,Grade 10"),
+        ("Tuition Fee - Grade 8-10", "tuition", "monthly", 2650.00, True, "Grade 8,Grade 9,Grade 10"),
+        ("Sports & Culture - Grade 8-10", "sport", "monthly", 100.00, True, "Grade 8,Grade 9,Grade 10"),
+        ("After School Care - Internal Learners", "aftercare", "monthly", 550.00, False, None),
+        ("After School Care Registration - External Learners", "registration", "annual", 450.00, False, None),
+        ("After School Care - External Learners", "aftercare", "monthly", 1035.00, False, None),
+        ("Bus Fee - Standard Monthly Rate", "transport", "monthly", 1155.00, False, None),
+        ("Application Form", "other", "once_off", 50.00, False, None),
     ]
     created_fi = []
     for i, (name, cat, freq, amt, mandatory, grades) in enumerate(fee_items):
@@ -54,6 +55,13 @@ def seed(db: Session):
         db.add(fi)
         created_fi.append(fi)
     db.flush()
+
+    db.add(models.TransportRoute(
+        name="Standard Bus Route",
+        description="Published standard route price. Fee may increase for learners living farther from the Academy.",
+        monthly_fee=Decimal("1155.00"),
+        is_active=True,
+    ))
 
     def make_code(db_session, adm_date):
         prefix = adm_date.strftime("%Y%m%d")
@@ -88,21 +96,15 @@ def seed(db: Session):
         db.add(l)
         db.flush()
 
-        # Auto-assign mandatory monthly fee for their grade
-        monthly_fi = next(
-            (fi for fi in created_fi if fi.is_mandatory and fi.frequency == "monthly"
-             and (not fi.applicable_grades or grade in [g.strip() for g in fi.applicable_grades.split(",")])),
-            None
-        )
-        if monthly_fi:
+        # Auto-assign all mandatory catalogue fees that apply to this learner's grade.
+        for fi in created_fi:
+            if not fi.is_mandatory:
+                continue
+            grades = [g.strip() for g in fi.applicable_grades.split(",")] if fi.applicable_grades else []
+            if grades and grade not in grades:
+                continue
             db.add(models.LearnerFeeItem(
-                learner_id=l.id, fee_item_id=monthly_fi.id,
-                is_active=True, assigned_by="seed",
-            ))
-        dev_fi = next((fi for fi in created_fi if fi.name == "Development Levy"), None)
-        if dev_fi:
-            db.add(models.LearnerFeeItem(
-                learner_id=l.id, fee_item_id=dev_fi.id,
+                learner_id=l.id, fee_item_id=fi.id,
                 is_active=True, assigned_by="seed",
             ))
         learners.append(l)

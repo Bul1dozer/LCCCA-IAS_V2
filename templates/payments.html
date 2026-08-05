@@ -176,7 +176,7 @@ async function openCreatePayment() {
 
   const learners = await ensureLearnersLoaded();
   const select = document.getElementById("paymentLearner");
-  select.innerHTML = learners.map(l => `<option value="${l.id}">${LCCA.escapeHtml(l.full_name)} (${LCCA.escapeHtml(l.learner_code)}) &mdash; Bal: ${LCCA.currency(l.balance)}</option>`).join("");
+  select.innerHTML = learners.map(l => `<option value="${l.id}">${LCCA.escapeHtml(l.full_name)} (${LCCA.escapeHtml(l.learner_code)})</option>`).join("");
   paymentModal.show();
 }
 

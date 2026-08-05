@@ -2,11 +2,13 @@ import os
 from datetime import datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy.orm import Session, joinedload
 from .. import models, schemas, auth
 from ..database import get_db
 from ..audit import audit_from_request
 from ..ledger import post_payment, reverse_payment_entry, validate_payment_amount, check_duplicate_reference, compute_balance, quantize
+from ..pdf_generator import build_receipt_pdf
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"],
                    dependencies=[Depends(auth.require_admin)])
@@ -82,6 +84,21 @@ def get_payment(payment_id: int, db: Session = Depends(get_db)):
     if not p:
         raise HTTPException(404, "Payment not found")
     return _to_out(p)
+
+
+@router.get("/{payment_id}/receipt")
+def payment_receipt(payment_id: int, db: Session = Depends(get_db)):
+    p = db.query(models.Payment).options(joinedload(models.Payment.learner)).filter(
+        models.Payment.id == payment_id
+    ).first()
+    if not p:
+        raise HTTPException(404, "Payment not found")
+    pdf = build_receipt_pdf(p, p.learner)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="Receipt_{payment_id:06d}.pdf"'},
+    )
 
 
 @router.post("/{payment_id}/reverse", response_model=schemas.PaymentOut)

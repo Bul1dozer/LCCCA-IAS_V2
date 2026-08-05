@@ -5,12 +5,14 @@ Validates before committing, returns row-level error reports.
 
 import csv, io, json
 from datetime import date, datetime
+from decimal import Decimal
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Request
 from sqlalchemy.orm import Session
 from .. import models, auth
 from ..database import get_db
 from ..audit import audit_from_request
 from ..fee_engine import auto_assign_mandatory_fees
+from ..ledger import post_payment, validate_payment_amount, check_duplicate_reference
 
 router = APIRouter(prefix="/api/imports", tags=["Imports"], dependencies=[Depends(auth.require_admin)])
 
@@ -34,19 +36,53 @@ def _read_file(file: UploadFile):
         return [row for row in reader]
 
 
+def _parse_date(value: str | None):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    return date.fromisoformat(raw)
+
+
+def _norm(value) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _learner_fingerprint(name, grade, class_name, admission, birth_date) -> tuple:
+    return (
+        _norm(name),
+        _norm(grade),
+        _norm(class_name),
+        admission.isoformat() if admission else "",
+        birth_date.isoformat() if birth_date else "",
+    )
+
+
 @router.post("/learners")
 async def import_learners(file: UploadFile = File(...), request: Request = None, db: Session = Depends(get_db)):
     rows = _read_file(file)
     success, errors = [], []
-    counter = db.query(models.Learner).count()
+    existing_learners = db.query(models.Learner).all()
+    existing_codes = {l.learner_code for l in existing_learners if l.learner_code}
+    existing_id_numbers = {_norm(l.id_number) for l in existing_learners if l.id_number}
+    existing_fingerprints = {
+        _learner_fingerprint(l.full_name, l.grade, l.class_name, l.date_of_admission, l.date_of_birth)
+        for l in existing_learners
+    }
+    seen_codes = set()
+    seen_id_numbers = set()
+    seen_fingerprints = set()
 
     for i, row in enumerate(rows, start=2):
         try:
             name = str(row.get("full_name") or row.get("name") or "").strip()
+            learner_code = str(row.get("learner_code") or "").strip()
+            id_number = str(row.get("id_number") or "").strip() or None
             grade = str(row.get("grade") or "").strip()
             class_name = str(row.get("class_name") or row.get("class") or "").strip()
             admission_raw = str(row.get("date_of_admission") or row.get("admission_date") or "").strip()
+            birth_raw = str(row.get("date_of_birth") or "").strip()
             status = str(row.get("status") or "Active").strip()
+            physical_address = str(row.get("physical_address") or row.get("address") or "").strip() or None
 
             if not name:
                 errors.append({"row": i, "error": "full_name is required"})
@@ -60,20 +96,53 @@ async def import_learners(file: UploadFile = File(...), request: Request = None,
             except ValueError:
                 errors.append({"row": i, "error": f"Invalid date_of_admission: {admission_raw}"})
                 continue
+            try:
+                birth_date = _parse_date(birth_raw)
+            except ValueError:
+                errors.append({"row": i, "error": f"Invalid date_of_birth: {birth_raw}"})
+                continue
 
-            counter += 1
-            from datetime import datetime as dt
-            code = f"LCCA-{dt.now().year}-{counter:04d}"
+            normalized_id = _norm(id_number)
+            fingerprint = _learner_fingerprint(name, grade, class_name or grade, admission, birth_date)
+            if learner_code and (learner_code in existing_codes or learner_code in seen_codes):
+                errors.append({"row": i, "error": f"Duplicate learner_code: {learner_code}"})
+                continue
+            if normalized_id and (normalized_id in existing_id_numbers or normalized_id in seen_id_numbers):
+                errors.append({"row": i, "error": f"Duplicate id_number: {id_number}"})
+                continue
+            if fingerprint in existing_fingerprints or fingerprint in seen_fingerprints:
+                errors.append({
+                    "row": i,
+                    "error": "Duplicate learner row: same name, grade, class, admission date, and birth date",
+                })
+                continue
 
-            learner = models.Learner(
-                learner_code=code, full_name=name, grade=grade,
-                class_name=class_name or grade, date_of_admission=admission,
-                status=status, balance=0.0,
-            )
-            db.add(learner)
-            db.flush()
-            auto_assign_mandatory_fees(db, learner, assigned_by="import")
-            success.append({"row": i, "learner_code": code, "full_name": name})
+            with db.begin_nested():
+                learner = models.Learner(
+                    learner_code=learner_code or "import",
+                    full_name=name,
+                    grade=grade,
+                    class_name=class_name or grade,
+                    date_of_admission=admission,
+                    status=status,
+                    balance=Decimal("0.00"),
+                    id_number=id_number,
+                    date_of_birth=birth_date,
+                    physical_address=physical_address,
+                )
+                db.add(learner)
+                db.flush()
+                auto_assign_mandatory_fees(db, learner, assigned_by="import")
+            existing_codes.add(learner.learner_code)
+            seen_codes.add(learner.learner_code)
+            if learner_code:
+                seen_codes.add(learner_code)
+            if normalized_id:
+                seen_id_numbers.add(normalized_id)
+                existing_id_numbers.add(normalized_id)
+            seen_fingerprints.add(fingerprint)
+            existing_fingerprints.add(fingerprint)
+            success.append({"row": i, "learner_code": learner.learner_code, "full_name": name})
         except Exception as e:
             errors.append({"row": i, "error": str(e)})
 
@@ -95,7 +164,7 @@ async def import_learners(file: UploadFile = File(...), request: Request = None,
     return {
         "total_rows": len(rows), "success": len(success), "errors": len(errors),
         "error_report": errors[:50],
-        "template_hint": "Columns: full_name, grade, class_name, date_of_admission (YYYY-MM-DD), status",
+        "template_hint": "Columns: learner_code, full_name, grade, class_name, date_of_admission, date_of_birth, id_number, physical_address, status",
     }
 
 
@@ -151,8 +220,8 @@ async def import_payments(file: UploadFile = File(...), request: Request = None,
                 errors.append({"row": i, "error": "learner_code required"})
                 continue
             try:
-                amount = float(amount_raw)
-            except ValueError:
+                amount = validate_payment_amount(Decimal(amount_raw))
+            except Exception:
                 errors.append({"row": i, "error": f"Invalid amount: {amount_raw}"})
                 continue
             try:
@@ -165,14 +234,24 @@ async def import_payments(file: UploadFile = File(...), request: Request = None,
             if not learner:
                 errors.append({"row": i, "error": f"Learner not found: {learner_code}"})
                 continue
+            if ref and check_duplicate_reference(db, ref):
+                errors.append({"row": i, "error": f"Duplicate payment reference: {ref}"})
+                continue
 
-            payment = models.Payment(
-                learner_id=learner.id, amount_paid=amount, date_paid=pay_date,
-                payment_method=method, reference_number=ref or None,
-            )
-            db.add(payment)
-            learner.balance = round(learner.balance - amount, 2)
-            success.append({"row": i, "learner_code": learner_code, "amount": amount})
+            with db.begin_nested():
+                payment = models.Payment(
+                    learner_id=learner.id,
+                    amount_paid=amount,
+                    payment_date=pay_date,
+                    date_paid=pay_date,
+                    payment_method=method,
+                    reference_number=ref or None,
+                    created_by=request.session.get("username", "import") if request else "import",
+                )
+                db.add(payment)
+                db.flush()
+                post_payment(db, learner.id, payment.id, amount, pay_date, payment.created_by)
+            success.append({"row": i, "learner_code": learner_code, "amount": str(amount)})
         except Exception as e:
             errors.append({"row": i, "error": str(e)})
 
@@ -205,7 +284,7 @@ def list_import_jobs(db: Session = Depends(get_db)):
 def download_template(import_type: str):
     """Return CSV column headers as a template."""
     templates = {
-        "learners": "full_name,grade,class_name,date_of_admission,status\nTendai Mukasa,Grade 3,3A,2024-01-15,Active",
+        "learners": "learner_code,full_name,grade,class_name,date_of_admission,date_of_birth,id_number,physical_address,status\n,Tendai Mukasa,Grade 3,3A,2024-01-15,2015-04-02,,12 Main St,Active",
         "parents": "full_name,email,phone,address\nMrs. Smith,smith@example.com,+264811234567,12 Main St",
         "payments": "learner_code,amount_paid,date_paid,payment_method,reference_number\nLCCA-2026-0001,2500,2026-02-01,Cash,RCPT-001",
     }

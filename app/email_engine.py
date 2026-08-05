@@ -77,11 +77,22 @@ async def send_invoice_email(
     if not recipient_email:
         recipient_email = "no-email-on-file@lcca.edu.na"
 
-    subject = f"LCCA Invoice {invoice.invoice_number} — {learner.full_name}"
+    if learner:
+        billing_label = learner.full_name
+        learner_sentence = f"{learner.full_name} ({learner.learner_code})"
+        notification_learner_id = learner.id
+    else:
+        primary_parent = parents[0] if parents else None
+        billing_label = primary_parent.full_name if primary_parent else "Parent/Guardian"
+        linked_ids = [item.learner_id for item in getattr(invoice, "items", []) if item.learner_id]
+        notification_learner_id = linked_ids[0] if linked_ids else None
+        learner_sentence = "the linked learners on your family account"
+
+    subject = f"LCCA Invoice {invoice.invoice_number} - {billing_label}"
     body_text = (
         f"Dear {recipient_name or 'Parent/Guardian'},\n\n"
         f"Please find attached Invoice {invoice.invoice_number} for "
-        f"{learner.full_name} ({learner.learner_code}). "
+        f"{learner_sentence}. "
         f"Outstanding balance: N$ {invoice.outstanding_balance:,.2f}. "
         f"Due date: {invoice.due_date.strftime('%d %b %Y')}.\n\n"
         f"Kind regards,\nLCCA Accounts Office"
@@ -128,12 +139,11 @@ async def send_invoice_email(
     db.add(models.NotificationLog(
         channel="email",
         invoice_id=invoice.id,
-        learner_id=learner.id,
+        learner_id=notification_learner_id,
         recipient=recipient_email,
         subject=subject,
         body_preview=body_text[:500],
         status=status.lower(),
-        provider_message_id=smtp_msg_id,
         error_message=error_msg,
         sent_at=datetime.utcnow() if status in ("Sent", "Simulated") else None,
     ))
@@ -198,7 +208,6 @@ async def send_sms_notification(
         recipient=phone,
         body_preview=message[:200],
         status=status,
-        provider_message_id=provider_id,
         error_message=error_msg,
         sent_at=datetime.utcnow() if status in ("sent", "simulated") else None,
     ))
