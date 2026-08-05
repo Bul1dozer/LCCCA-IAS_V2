@@ -46,6 +46,14 @@
         <button type="submit" class="btn-lcca-primary" id="loginBtn">Sign In</button>
       </form>
 
+      <form id="twoFactorForm" style="display:none;">
+        <div class="lcca-input-group">
+          <label for="twoFactorCode">Authenticator code</label>
+          <input type="text" id="twoFactorCode" name="twoFactorCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        </div>
+        <button type="submit" class="btn-lcca-primary" id="twoFactorBtn">Verify</button>
+      </form>
+
       <div class="auth-helper">
         <strong>Demo credentials</strong> &mdash; Username: <code>admin</code> &middot; Password: <code>admin123</code>
       </div>
@@ -54,11 +62,13 @@
         <strong>Recover access</strong>
         <form id="passwordResetForm" class="mt-2">
           <input type="text" id="resetUsername" class="form-control form-control-sm mb-2" placeholder="Username" autocomplete="username">
+          <input type="email" id="resetEmail" class="form-control form-control-sm mb-2" placeholder="Email" autocomplete="email">
           <button type="submit" class="btn-lcca btn-lcca-outline btn-lcca-sm">Request Recovery Token</button>
         </form>
         <form id="passwordResetConfirmForm" class="mt-2">
           <input type="text" id="resetToken" class="form-control form-control-sm mb-2" placeholder="Recovery token">
           <input type="password" id="resetNewPassword" class="form-control form-control-sm mb-2" placeholder="New password">
+          <input type="password" id="resetConfirmPassword" class="form-control form-control-sm mb-2" placeholder="Confirm new password">
           <button type="submit" class="btn-lcca btn-lcca-gold btn-lcca-sm">Reset Password</button>
         </form>
         <div id="resetStatus" class="cell-muted" style="font-size:0.8rem;"></div>
@@ -69,18 +79,32 @@
 
 <script>
   const form = document.getElementById("loginForm");
+  const twoFactorForm = document.getElementById("twoFactorForm");
   const errorBox = document.getElementById("loginError");
   const btn = document.getElementById("loginBtn");
+  const twoFactorBtn = document.getElementById("twoFactorBtn");
   const resetStatus = document.getElementById("resetStatus");
+
+  function csrfHeaders() {
+    const token = document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("lcca_csrf="))
+      ?.split("=")
+      .slice(1)
+      .join("=") || "";
+    return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+  }
 
   document.getElementById("passwordResetForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const username = document.getElementById("resetUsername").value.trim();
+    const email = document.getElementById("resetEmail").value.trim();
     try {
-      const data = await fetch("/api/auth/password-reset", {
+      const data = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({ username, email }),
       }).then(r => r.json());
       resetStatus.textContent = data.message || "Recovery token issued.";
     } catch (err) {
@@ -92,11 +116,12 @@
     e.preventDefault();
     const token = document.getElementById("resetToken").value.trim();
     const newPassword = document.getElementById("resetNewPassword").value;
+    const confirmPassword = document.getElementById("resetConfirmPassword").value;
     try {
-      const data = await fetch("/api/auth/password-reset/confirm", {
+      const data = await fetch("/api/auth/reset-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, new_password: newPassword }),
+        headers: { "Content-Type": "application/json", ...csrfHeaders() },
+        body: JSON.stringify({ token, new_password: newPassword, confirm_password: confirmPassword }),
       }).then(r => r.json());
       resetStatus.textContent = data.message || "Password updated.";
     } catch (err) {
@@ -125,12 +150,46 @@
         throw new Error(data.detail || "Invalid username or password.");
       }
 
+      const data = await res.json().catch(() => ({}));
+      if (data.requires_2fa) {
+        form.style.display = "none";
+        twoFactorForm.style.display = "block";
+        document.getElementById("twoFactorCode").focus();
+        return;
+      }
+
       window.location.href = "/dashboard";
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.style.display = "block";
       btn.disabled = false;
       btn.textContent = "Sign In";
+    }
+  });
+
+  twoFactorForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.style.display = "none";
+    twoFactorBtn.disabled = true;
+    twoFactorBtn.innerHTML = '<span class="spinner-lcca"></span> Verifying...';
+
+    try {
+      const code = document.getElementById("twoFactorCode").value.trim();
+      const res = await fetch("/api/auth/login/2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Invalid two-factor code.");
+      }
+      window.location.href = "/dashboard";
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.style.display = "block";
+      twoFactorBtn.disabled = false;
+      twoFactorBtn.textContent = "Verify";
     }
   });
 </script>

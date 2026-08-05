@@ -88,6 +88,12 @@ const matchModal = new bootstrap.Modal(document.getElementById("matchModal"));
 const RECON_COLORS = { unmatched:"warning", matched:"active", manually_matched:"active", excluded:"info" };
 const RECON_ICONS = { unmatched:"question-circle", matched:"check-circle-fill", manually_matched:"link-45deg", excluded:"dash-circle" };
 
+function csrfHeaders() {
+  const token = document.cookie.split(";").map((part) => part.trim())
+    .find((part) => part.startsWith("lcca_csrf="))?.split("=").slice(1).join("=") || "";
+  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+}
+
 async function importStatement() {
   const fileInput = document.getElementById("stmtFile");
   if (!fileInput.files.length) { LCCA.toast("Please select a CSV file.", "error"); return; }
@@ -97,7 +103,7 @@ async function importStatement() {
   resultEl.innerHTML = `<div class="d-flex align-items-center gap-2"><span class="spinner-border spinner-border-sm"></span> Importing...</div>`;
   try {
     const res = await fetch("/api/recon/import-statement", {
-      method: "POST", body: formData, credentials: "same-origin"
+      method: "POST", body: formData, credentials: "same-origin", headers: csrfHeaders()
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Import failed");

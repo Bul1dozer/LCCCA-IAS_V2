@@ -112,6 +112,15 @@ def save_sms(payload: dict, request: Request, db: Session = Depends(get_db)):
 
 # ---- 2FA / TOTP ----
 
+@router.get("/2fa/status")
+def status_2fa(request: Request, db: Session = Depends(get_db)):
+    uid = request.session.get("user_id")
+    user = db.query(models.User).filter(models.User.id == uid).first()
+    if not user:
+        raise HTTPException(401)
+    return {"enabled": bool(user.totp_enabled)}
+
+
 @router.post("/2fa/setup")
 def setup_2fa(request: Request, db: Session = Depends(get_db)):
     import pyotp, qrcode
@@ -119,13 +128,16 @@ def setup_2fa(request: Request, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == uid).first()
     if not user:
         raise HTTPException(401)
+    if user.totp_enabled:
+        raise HTTPException(400, "2FA is already enabled.")
 
     secret = pyotp.random_base32()
+    encrypted_secret = auth.encrypt_totp_secret(secret)
     totp_rec = db.query(models.TotpSecret).filter(models.TotpSecret.user_id == uid).first()
     if totp_rec:
-        totp_rec.secret = secret
+        totp_rec.secret = encrypted_secret
     else:
-        db.add(models.TotpSecret(user_id=uid, secret=secret))
+        db.add(models.TotpSecret(user_id=uid, secret=encrypted_secret))
     db.commit()
 
     otp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
@@ -146,10 +158,13 @@ def verify_2fa(payload: dict, request: Request, db: Session = Depends(get_db)):
     totp_rec = db.query(models.TotpSecret).filter(models.TotpSecret.user_id == uid).first()
     if not totp_rec:
         raise HTTPException(400, "2FA not set up. Run /setup first.")
-    totp = pyotp.TOTP(totp_rec.secret)
+    secret = auth.decrypt_totp_secret(totp_rec.secret)
+    totp = pyotp.TOTP(secret)
     if not totp.verify(str(payload.get("code", ""))):
         raise HTTPException(400, "Invalid code.")
     user = db.query(models.User).filter(models.User.id == uid).first()
+    if not auth.is_encrypted_totp_secret(totp_rec.secret):
+        totp_rec.secret = auth.encrypt_totp_secret(secret)
     user.totp_enabled = True
     audit_from_request(request, db, "CONFIG", "User", uid, "2FA enabled")
     db.commit()
@@ -157,11 +172,20 @@ def verify_2fa(payload: dict, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/2fa/disable")
-def disable_2fa(request: Request, db: Session = Depends(get_db)):
+def disable_2fa(payload: dict, request: Request, db: Session = Depends(get_db)):
+    import pyotp
     uid = request.session.get("user_id")
     user = db.query(models.User).filter(models.User.id == uid).first()
     if not user:
         raise HTTPException(401)
+    if not auth.verify_password(str(payload.get("current_password", "")), user.password_hash):
+        raise HTTPException(400, "Current password is incorrect.")
+    totp_rec = db.query(models.TotpSecret).filter(models.TotpSecret.user_id == uid).first()
+    if user.totp_enabled and totp_rec:
+        secret = auth.decrypt_totp_secret(totp_rec.secret)
+        totp = pyotp.TOTP(secret)
+        if not totp.verify(str(payload.get("code", "")).strip(), valid_window=1):
+            raise HTTPException(400, "Invalid code.")
     user.totp_enabled = False
     db.query(models.TotpSecret).filter(models.TotpSecret.user_id == uid).delete()
     audit_from_request(request, db, "CONFIG", "User", uid, "2FA disabled")

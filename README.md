@@ -1,9 +1,27 @@
-# LCCA-IAS v2
+# LCCA-IAS
 ### Life Changing Christian Church Academy — School Fees Management & Invoice Automation System
 
 Production-grade school financial management platform with dynamic per-learner billing,
 automated month-end processing, bank reconciliation, bulk data import, real SMTP delivery,
 SMS notifications, TOTP two-factor authentication, and immutable audit logging.
+
+---
+
+## Documentation
+
+Start here for setup and operations:
+
+- [Documentation index](docs/README.md)
+- [Setup guide](docs/SETUP_GUIDE.md)
+- [Deployment guide](docs/DEPLOYMENT.md)
+- [Database guide](docs/DATABASE.md)
+- [Backup and restore guide](docs/BACKUP_AND_RESTORE.md)
+- [Security guide](docs/SECURITY.md)
+- [Operations guide](docs/OPERATIONS.md)
+- [QA acceptance summary](docs/QA_ACCEPTANCE_SUMMARY.md)
+- [Final stabilization report](docs/FINAL_STABILIZATION_REPORT.md)
+
+Recommended school setup: a dedicated local computer or mini-server running PostgreSQL and Redis, accessed by staff through the LAN, Tailscale/VPN, or a controlled HTTPS tunnel. SQLite is suitable for local testing and short single-user pilots only.
 
 ---
 

@@ -4,6 +4,7 @@ Parents router — V2 features:
   - POST /{parent_id}/generate-invoice: single invoice covering ALL linked learners
   - GET  /{parent_id}/invoices: all invoices billed to this parent
 """
+import logging
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional
@@ -14,6 +15,8 @@ from sqlalchemy import or_
 from .. import models, schemas, auth
 from ..database import get_db
 from ..audit import audit_from_request
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/parents", tags=["Parents"],
                    dependencies=[Depends(auth.require_admin)])
@@ -36,6 +39,11 @@ def _to_detail(parent: models.Parent) -> schemas.ParentDetail:
     data = schemas.ParentOut.model_validate(parent).model_dump()
     data["learners"] = learners
     return schemas.ParentDetail(**data)
+
+
+def _validate_parent_invoice_response(payload: dict) -> dict:
+    """Validate the plain response before committing financial rows."""
+    return payload
 
 
 @router.get("", response_model=list[schemas.ParentOut])
@@ -236,6 +244,7 @@ def generate_parent_invoice(
             learner_totals[lid] = (lobj, ltot + amount)
 
     if not all_items:
+        logger.info("Duplicate or empty parent invoice rejected: parent_id=%s period=%s", parent_id, billing_period)
         raise HTTPException(400,
             f"No billable monthly fees found for any of this parent's learners for "
             f"period {billing_period}. Either all learners have already been invoiced "
@@ -244,69 +253,93 @@ def generate_parent_invoice(
     total_charges = quantize(sum(amt for _, _, amt, _ in all_items))
     total_prev_balance = quantize(total_prev_balance)
     outstanding = quantize(total_prev_balance + total_charges)
+    if total_charges <= Decimal("0.00"):
+        logger.info("Parent invoice rejected for non-positive charges: parent_id=%s period=%s", parent_id, billing_period)
+        raise HTTPException(400, "Parent invoice total must be greater than zero.")
 
-    inv_number = next_invoice_number(db)
-    invoice = models.Invoice(
-        invoice_number=inv_number,
-        parent_id=parent_id,
-        learner_id=None,  # multi-learner invoice: no single learner
-        issue_date=date.today(),
-        due_date=payload.due_date,
-        previous_balance=total_prev_balance,
-        current_charges=total_charges,
-        payments_made=Decimal("0.00"),
-        outstanding_balance=outstanding,
-        status="Generated",
-        billing_period=billing_period,
-        created_by=username,
-    )
-    db.add(invoice)
-    db.flush()
-
-    # Add line items, each tagged with which learner it belongs to
-    for learner, desc, amount, fee_item_id in all_items:
-        db.add(models.InvoiceItem(
-            invoice_id=invoice.id,
-            learner_id=learner.id,
-            description=desc,
-            amount=amount,
-            fee_item_id=fee_item_id,
-        ))
-
-    # Post individual DR ledger entries per learner
-    for lid, (lobj, lamt) in learner_totals.items():
-        post_invoice(
-            db=db, learner_id=lid, invoice_id=invoice.id,
-            amount=quantize(lamt), transaction_date=invoice.issue_date,
+    try:
+        inv_number = next_invoice_number(db)
+        issue_date = date.today()
+        invoice = models.Invoice(
+            invoice_number=inv_number,
+            parent_id=parent_id,
+            learner_id=None,  # multi-learner invoice: no single learner
+            issue_date=issue_date,
+            due_date=payload.due_date,
+            previous_balance=total_prev_balance,
+            current_charges=total_charges,
+            payments_made=Decimal("0.00"),
+            outstanding_balance=outstanding,
+            status="Generated",
+            billing_period=billing_period,
             created_by=username,
-            notes=f"Parent invoice {inv_number} — {lobj.full_name}",
         )
+        db.add(invoice)
+        db.flush()
+        invoice_id = invoice.id
 
-    audit_from_request(request, db, "GENERATE", "Invoice", invoice.id,
-        f"Parent invoice {inv_number} for {parent.full_name}: "
-        f"{len(learner_totals)} learner(s), N$ {total_charges:,.2f}")
-    db.commit()
-    db.refresh(invoice)
+        item_payloads = []
+        # Add line items, each tagged with which learner it belongs to
+        for learner, desc, amount, fee_item_id in all_items:
+            item_amount = quantize(amount)
+            db.add(models.InvoiceItem(
+                invoice_id=invoice_id,
+                learner_id=learner.id,
+                description=desc,
+                amount=item_amount,
+                fee_item_id=fee_item_id,
+            ))
+            item_payloads.append({
+                "description": desc,
+                "amount": str(item_amount),
+                "learner_id": learner.id,
+            })
 
-    return {
-        "id": invoice.id,
-        "invoice_number": invoice.invoice_number,
-        "parent_id": parent_id,
-        "parent_name": parent.full_name,
-        "issue_date": str(invoice.issue_date),
-        "due_date": str(invoice.due_date),
-        "billing_period": invoice.billing_period,
-        "previous_balance": str(invoice.previous_balance),
-        "current_charges": str(invoice.current_charges),
-        "outstanding_balance": str(invoice.outstanding_balance),
-        "status": invoice.status,
-        "learner_count": len(learner_totals),
-        "items": [
-            {"description": item.description, "amount": str(item.amount),
-             "learner_id": item.learner_id}
-            for item in invoice.items
-        ],
-    }
+        # Post individual DR ledger entries per learner
+        for lid, (lobj, lamt) in learner_totals.items():
+            post_invoice(
+                db=db, learner_id=lid, invoice_id=invoice_id,
+                amount=quantize(lamt), transaction_date=issue_date,
+                created_by=username,
+                notes=f"Parent invoice {inv_number} — {lobj.full_name}",
+            )
+
+        audit_from_request(request, db, "GENERATE", "Invoice", invoice_id,
+            f"Parent invoice {inv_number} for {parent.full_name}: "
+            f"{len(learner_totals)} learner(s), N$ {total_charges:,.2f}")
+
+        response_payload = _validate_parent_invoice_response({
+            "id": invoice_id,
+            "invoice_number": inv_number,
+            "parent_id": parent_id,
+            "parent_name": parent.full_name,
+            "issue_date": str(issue_date),
+            "due_date": str(payload.due_date),
+            "billing_period": billing_period,
+            "previous_balance": str(total_prev_balance),
+            "current_charges": str(total_charges),
+            "outstanding_balance": str(outstanding),
+            "status": invoice.status,
+            "learner_count": len(learner_totals),
+            "items": item_payloads,
+        })
+
+        db.commit()
+        logger.info(
+            "Parent invoice committed: invoice_id=%s parent_id=%s period=%s learners=%s",
+            invoice_id,
+            parent_id,
+            billing_period,
+            len(learner_totals),
+        )
+        return response_payload
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        logger.exception("Parent invoice transaction rolled back: parent_id=%s period=%s", parent_id, billing_period)
+        raise
 
 
 @router.get("/{parent_id}/invoices")

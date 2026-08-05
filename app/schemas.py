@@ -11,6 +11,9 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class TwoFactorLoginRequest(BaseModel):
+    code: str
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
@@ -221,10 +224,12 @@ class InvoiceOut(BaseModel):
     payments_made: Decimal
     outstanding_balance: Decimal
     status: str
+    billing_period: Optional[str] = None
     created_at: datetime
     learner_name: Optional[str] = None
     learner_code: Optional[str] = None
     parent_name: Optional[str] = None
+    linked_learner_names: List[str] = []
     items: List[InvoiceItemOut] = []
     voided_at: Optional[datetime] = None
     void_reason: Optional[str] = None
@@ -243,6 +248,13 @@ class FeeItemBase(BaseModel):
     applicable_grades: Optional[str] = None
     applicable_classes: Optional[str] = None
     sort_order: int = 0
+
+    @field_validator("amount")
+    @classmethod
+    def amount_must_be_positive(cls, value: Decimal) -> Decimal:
+        if value <= Decimal("0.00"):
+            raise ValueError("Fee item amount must be greater than zero")
+        return value
 
 class FeeItemCreate(FeeItemBase):
     pass
@@ -299,8 +311,14 @@ class DashboardStats(BaseModel):
     total_outstanding_balance: Decimal
     total_payments_received: Decimal
     invoices_generated: int
+    invoices_sent: int = 0
     active_learners: int
     collection_rate: Decimal
+
+class DashboardActivity(BaseModel):
+    description: str
+    timestamp: datetime
+    icon: str
 
 class MonthlyCollection(BaseModel):
     month: str

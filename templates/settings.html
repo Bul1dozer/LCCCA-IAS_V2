@@ -162,6 +162,14 @@
           <div id="twoFaStatus" class="mb-3"></div>
           <button class="btn-lcca btn-lcca-navy me-2" onclick="setup2fa()"><i class="bi bi-qr-code"></i> Set Up 2FA</button>
           <button class="btn-lcca btn-lcca-danger-outline" onclick="disable2fa()"><i class="bi bi-shield-x"></i> Disable 2FA</button>
+          <div class="row g-2 mt-3">
+            <div class="col-md-7">
+              <input type="password" class="form-control form-control-sm" id="disable2faPassword" placeholder="Current password">
+            </div>
+            <div class="col-md-5">
+              <input type="text" class="form-control form-control-sm" id="disable2faCode" placeholder="6-digit code" maxlength="6" inputmode="numeric">
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -322,9 +330,10 @@ document.getElementById("passwordChangeForm").addEventListener("submit", async (
     return;
   }
   try {
-    await LCCA.api.post("/auth/password-change", {
+    await LCCA.api.post("/auth/change-password", {
       current_password: document.getElementById("currentPassword").value,
       new_password: newPassword,
+      confirm_password: confirmPassword,
     });
     LCCA.toast("Password updated successfully.");
     document.getElementById("passwordChangeForm").reset();
@@ -335,10 +344,13 @@ document.getElementById("passwordChangeForm").addEventListener("submit", async (
 
 async function load2faStatus() {
   try {
-    const me = await LCCA.api.get("/auth/me");
+    const status = await LCCA.api.get("/settings/2fa/status");
     const el = document.getElementById("twoFaStatus");
-    // me doesn't return totp_enabled currently, so we check via session
-    el.innerHTML = `<div class="cell-muted">Two-factor authentication adds a second verification step using an authenticator app (Google Authenticator, Authy, etc.) to protect your administrator account.</div>`;
+    if (status.enabled) {
+      el.innerHTML = `<span class="badge-status active"><i class="bi bi-shield-check-fill me-1"></i>2FA is ENABLED</span>`;
+    } else {
+      el.innerHTML = `<span class="badge-status generated">2FA is disabled</span>`;
+    }
   } catch (err) { /* silent */ }
 }
 
@@ -364,11 +376,22 @@ async function verify2fa() {
 
 async function disable2fa() {
   if (!confirm("Disable two-factor authentication? This will reduce account security.")) return;
+  const currentPassword = document.getElementById("disable2faPassword").value;
+  const code = document.getElementById("disable2faCode").value.trim();
+  if (!currentPassword || !code) {
+    LCCA.toast("Enter your password and current 2FA code first.", "error");
+    return;
+  }
   try {
-    const r = await LCCA.api.post("/settings/2fa/disable", {});
+    const r = await LCCA.api.post("/settings/2fa/disable", {
+      current_password: currentPassword,
+      code,
+    });
     LCCA.toast(r.message || "2FA disabled.");
     document.getElementById("twoFaStatus").innerHTML = `<span class="badge-status generated">2FA is disabled</span>`;
     document.getElementById("qrPanel").style.display = "none";
+    document.getElementById("disable2faPassword").value = "";
+    document.getElementById("disable2faCode").value = "";
   } catch (err) { LCCA.toast("Failed to disable 2FA: " + err.message, "error"); }
 }
 

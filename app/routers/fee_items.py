@@ -26,6 +26,8 @@ def list_fee_items(
 
 @router.post("", response_model=schemas.FeeItemOut, status_code=201)
 def create_fee_item(payload: schemas.FeeItemCreate, request: Request, db: Session = Depends(get_db)):
+    if payload.amount <= Decimal("0.00"):
+        raise HTTPException(400, "Fee item amount must be greater than zero")
     fi = models.FeeItem(**payload.model_dump())
     db.add(fi)
     db.flush()
@@ -46,6 +48,8 @@ def get_fee_item(fee_item_id: int, db: Session = Depends(get_db)):
 @router.put("/{fee_item_id}", response_model=schemas.FeeItemOut)
 def update_fee_item(fee_item_id: int, payload: schemas.FeeItemUpdate,
                     request: Request, db: Session = Depends(get_db)):
+    if payload.amount <= Decimal("0.00"):
+        raise HTTPException(400, "Fee item amount must be greater than zero")
     fi = db.query(models.FeeItem).filter(models.FeeItem.id == fee_item_id).first()
     if not fi:
         raise HTTPException(404, "Fee item not found")

@@ -14,7 +14,7 @@ from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import (
     Column, Integer, String, Numeric, Date, DateTime, ForeignKey,
-    Text, Boolean, Index, UniqueConstraint, CheckConstraint
+    Text, Boolean, Index, UniqueConstraint, CheckConstraint, event, select, func
 )
 from sqlalchemy.orm import relationship
 import enum
@@ -110,6 +110,14 @@ class Learner(Base):
     transport_route = relationship("TransportRoute", back_populates="learners")
     ledger_entries = relationship("LedgerEntry", back_populates="learner", cascade="all, delete-orphan")
 
+    @property
+    def learner_id(self):
+        return self.learner_code
+
+    @learner_id.setter
+    def learner_id(self, value):
+        self.learner_code = value
+
 # ---------------------------------------------------------------------------
 # Parents — V2: adds employer fields
 # ---------------------------------------------------------------------------
@@ -136,6 +144,14 @@ class Parent(Base):
     relationships_ = relationship("LearnerParentRelationship", back_populates="parent", cascade="all, delete-orphan")
     invoices = relationship("Invoice", back_populates="parent", foreign_keys="Invoice.parent_id")  # V2 NEW
 
+    @property
+    def position(self):
+        return self.occupation
+
+    @position.setter
+    def position(self, value):
+        self.occupation = value
+
 class LearnerParentRelationship(Base):
     __tablename__ = "learner_parent_relationships"
     id = Column(Integer, primary_key=True, index=True)
@@ -145,6 +161,32 @@ class LearnerParentRelationship(Base):
     is_primary = Column(Boolean, nullable=False, default=False)
     learner = relationship("Learner", back_populates="relationships_")
     parent = relationship("Parent", back_populates="relationships_")
+
+
+def _is_valid_learner_code(value) -> bool:
+    return isinstance(value, str) and len(value) == 10 and value.isdigit()
+
+
+@event.listens_for(Learner, "before_insert")
+def _ensure_learner_code(mapper, connection, target):
+    if _is_valid_learner_code(target.learner_code):
+        return
+    admission_date = target.date_of_admission or datetime.utcnow().date()
+    prefix = admission_date.strftime("%y%m%d")
+    existing = connection.execute(
+        select(func.count()).select_from(Learner.__table__).where(
+            Learner.__table__.c.learner_code.like(f"{prefix}%")
+        )
+    ).scalar() or 0
+    for offset in range(1, 10000):
+        candidate = f"{prefix}{existing + offset:04d}"
+        found = connection.execute(
+            select(Learner.__table__.c.id).where(Learner.__table__.c.learner_code == candidate)
+        ).first()
+        if not found:
+            target.learner_code = candidate
+            return
+    raise ValueError("Could not generate a unique learner number")
 
 # ---------------------------------------------------------------------------
 # Fee Structures (v1 legacy)
@@ -349,7 +391,7 @@ class TotpSecret(Base):
     __tablename__ = "totp_secrets"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    secret = Column(String(64), nullable=False)
+    secret = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     user = relationship("User", back_populates="totp_secret")
 
