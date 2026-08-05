@@ -333,7 +333,7 @@ function buildGenerateInvoiceRequest() {
 
   const learnerId = requireSelectedInt("genLearner", "Learner");
   const feeStructureValue = document.getElementById("genFeeStructure").value;
-  const payload = { learner_id: learnerId, due_date: dueDate };
+  const payload = { learner_id: learnerId, due_date: dueDate, billing_period: billingPeriod };
   if (feeStructureValue) payload.fee_structure_id = parseInt(feeStructureValue, 10);
   return {
     endpoint: "/invoices/generate",

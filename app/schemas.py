@@ -201,6 +201,7 @@ class GenerateInvoiceRequest(BaseModel):
     learner_id: int
     fee_structure_id: Optional[int] = None
     due_date: date
+    billing_period: Optional[str] = None
 
 class GenerateParentInvoiceRequest(BaseModel):
     parent_id: int
@@ -271,6 +272,7 @@ class FeeItemOut(FeeItemBase):
 class AssignFeeItemRequest(BaseModel):
     fee_item_id: int
     custom_amount: Optional[Decimal] = None
+    notes: Optional[str] = None
 
 class LearnerFeeItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

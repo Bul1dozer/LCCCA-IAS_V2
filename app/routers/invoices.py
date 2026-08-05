@@ -10,6 +10,8 @@ from ..database import get_db
 from ..audit import audit_from_request
 from ..ledger import next_invoice_number, post_invoice, void_invoice_entries, compute_balance, quantize
 from ..fee_engine import generate_invoice_for_learner, get_active_fee_items_for_learner
+from ..pdf_generator import build_invoice_pdf
+from ..email_engine import send_invoice_email
 
 router = APIRouter(prefix="/api/invoices", tags=["Invoices"],
                    dependencies=[Depends(auth.require_admin)])
@@ -63,6 +65,14 @@ def _linked_learner_names(invoice: models.Invoice) -> list[str]:
     if not linked and invoice.learner:
         linked.append(invoice.learner.full_name)
     return linked
+
+
+def _parent_contacts_for_invoice(invoice: models.Invoice) -> list[models.Parent]:
+    if invoice.parent:
+        return [invoice.parent]
+    if not invoice.learner:
+        return []
+    return [rel.parent for rel in invoice.learner.relationships_ if rel.parent]
 
 
 def _to_out(invoice: models.Invoice) -> schemas.InvoiceOut:
@@ -133,9 +143,9 @@ def generate_invoice(payload: schemas.GenerateInvoiceRequest,
 
     username = request.session.get("username", "system")
     has_profile = bool(get_active_fee_items_for_learner(db, learner))
+    billing_period = payload.billing_period or payload.due_date.strftime("%Y-%m")
 
     if has_profile:
-        billing_period = payload.due_date.strftime("%Y-%m")
         invoice = generate_invoice_for_learner(
             db=db, learner=learner, due_date=payload.due_date,
             billing_period=billing_period, triggered_by=username,
@@ -157,7 +167,7 @@ def generate_invoice(payload: schemas.GenerateInvoiceRequest,
             due_date=payload.due_date, previous_balance=prev_bal,
             current_charges=charges, payments_made=Decimal("0.00"),
             outstanding_balance=quantize(prev_bal + charges),
-            status="Generated", created_by=username,
+            status="Generated", billing_period=billing_period, created_by=username,
         )
         db.add(invoice)
         db.flush()
@@ -185,6 +195,79 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     if not invoice:
         raise HTTPException(404, "Invoice not found")
     return _to_out(invoice)
+
+
+def _invoice_pdf_response(invoice: models.Invoice, disposition: str) -> Response:
+    learner = invoice.learner if invoice.learner_id else None
+    pdf = build_invoice_pdf(
+        invoice,
+        learner,
+        _parent_contacts_for_invoice(invoice),
+        invoice.items,
+    )
+    filename = f"Invoice_{invoice.invoice_number}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
+
+
+@router.get("/{invoice_id}/preview")
+def preview_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = _load_invoice(invoice_id, db)
+    if not invoice:
+        raise HTTPException(404, "Invoice not found")
+    return _invoice_pdf_response(invoice, "inline")
+
+
+@router.get("/{invoice_id}/pdf")
+def download_invoice_pdf(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = _load_invoice(invoice_id, db)
+    if not invoice:
+        raise HTTPException(404, "Invoice not found")
+    return _invoice_pdf_response(invoice, "attachment")
+
+
+@router.post("/{invoice_id}/send")
+async def send_invoice(
+    invoice_id: int,
+    payload: schemas.SendEmailRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    invoice = _load_invoice(invoice_id, db)
+    if not invoice:
+        raise HTTPException(404, "Invoice not found")
+
+    learner = invoice.learner if invoice.learner_id else None
+    parents = _parent_contacts_for_invoice(invoice)
+    pdf = build_invoice_pdf(invoice, learner, parents, invoice.items)
+    result = await send_invoice_email(
+        db,
+        invoice,
+        learner,
+        parents,
+        pdf,
+        recipient_override=payload.recipient_email,
+    )
+    audit_from_request(
+        request,
+        db,
+        "SEND",
+        "Invoice",
+        invoice.id,
+        f"Emailed {invoice.invoice_number} to {result['recipient']}",
+    )
+    db.commit()
+    return {
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "recipient_email": result["recipient"],
+        "status": result["status"],
+        "real_send": result["real_send"],
+        "error": result["error"],
+    }
 
 
 @router.post("/{invoice_id}/void", response_model=schemas.InvoiceOut)
