@@ -102,13 +102,13 @@
   <div class="modal-dialog modal-sm">
     <div class="modal-content lcca-modal">
       <div class="modal-header">
-        <h5 class="modal-title">Send Invoice (Simulated)</h5>
+        <h5 class="modal-title">Send Invoice</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form id="sendEmailForm">
         <div class="modal-body">
           <input type="hidden" id="sendInvoiceId">
-          <p class="cell-muted">This will simulate sending the invoice by email and log it under Email Logs. No real email is sent in this prototype.</p>
+          <p class="cell-muted">This sends the invoice email with the printable PDF attached when SMTP is configured. If SMTP is not configured, the send is logged in simulated mode.</p>
           <label class="form-label">Recipient Email (optional override)</label>
           <input type="email" class="form-control" id="sendRecipientEmail" placeholder="Defaults to parent's email on file">
         </div>

@@ -1,0 +1,8 @@
+learner_code,full_name,grade,class_name,date_of_admission,date_of_birth,id_number,physical_address,status
+2026080601,Leah Mocke,Grade 1,1A,2026-08-06,2019-03-14,TEST-LEAH-001,101 Test Street Windhoek,Active
+2026080602,Daniel Mocke,Grade 4,4A,2026-08-06,2016-09-21,TEST-DAN-002,101 Test Street Windhoek,Active
+2026080603,Joel Nambinga,Grade 7,7A,2026-08-06,2013-05-08,TEST-JOEL-003,22 Training Avenue Katutura,Active
+2026080604,Naomi Shivute,Grade 8,8A,2026-08-06,2012-01-30,TEST-NAOMI-004,7 Demo Crescent Windhoek,Active
+2026080605,Micah Amadhila,Toddler Class,T1,2026-08-06,2022-11-02,TEST-MICAH-005,44 Practice Road Windhoek,Active
+2026080606,Grace Gertze,Baby Class,B1,2026-08-06,2024-06-18,TEST-GRACE-006,15 Sample Close Windhoek,Active
+

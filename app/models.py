@@ -469,6 +469,23 @@ class NotificationLog(Base):
     invoice = relationship("Invoice", back_populates="notification_logs")
 
 # ---------------------------------------------------------------------------
+# Imports
+# ---------------------------------------------------------------------------
+class ImportJob(Base):
+    __tablename__ = "import_jobs"
+    id = Column(Integer, primary_key=True, index=True)
+    import_type = Column(String(50), nullable=False)
+    filename = Column(String(255))
+    total_rows = Column(Integer, nullable=False, default=0)
+    success_rows = Column(Integer, nullable=False, default=0)
+    error_rows = Column(Integer, nullable=False, default=0)
+    status = Column(String(30), nullable=False, default="completed")
+    error_report = Column(Text)
+    uploaded_by = Column(String(100), nullable=False, default="admin")
+    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+
+# ---------------------------------------------------------------------------
 # Month-End
 # ---------------------------------------------------------------------------
 class MonthEndRun(Base):

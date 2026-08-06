@@ -1,0 +1,8 @@
+date,description,amount,reference
+2026-08-06,Mock EFT payment Leah Mocke,500.00,MOCK-EFT-0001
+2026-08-06,Mock EFT payment Daniel Mocke,750.00,MOCK-EFT-0002
+2026-08-06,Mock cash deposit Joel Nambinga,1000.00,MOCK-CASH-0003
+2026-08-06,Mock bank transfer Naomi Shivute,1250.00,MOCK-BANK-0004
+2026-08-06,Mock mobile money Micah Amadhila,300.00,MOCK-MOMO-0005
+2026-08-06,Mock cash deposit Grace Gertze,250.00,MOCK-CASH-0006
+2026-08-06,Unmatched test deposit,99.99,MOCK-UNMATCHED-0007

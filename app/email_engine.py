@@ -6,36 +6,54 @@ The SMTP send runs with asyncio.wait_for so a slow/blocked connection
 cannot stall the event loop indefinitely.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime
-from typing import Optional
-from sqlalchemy.orm import Session
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
-def _get_active_smtp(db: Session):
+def _get_active_smtp(db: "Session"):
     from . import models
     return db.query(models.SmtpConfig).filter(models.SmtpConfig.is_active == True).first()
 
 
-async def _send_via_smtp(smtp_cfg, to_addr: str, subject: str, body_html: str, body_text: str = "") -> str:
+async def _send_via_smtp(
+    smtp_cfg,
+    to_addr: str,
+    subject: str,
+    body_html: str,
+    body_text: str = "",
+    attachment_bytes: Optional[bytes] = None,
+    attachment_filename: Optional[str] = None,
+) -> str:
     """Send one email via aiosmtplib. Returns message-id string."""
     import aiosmtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
+    from email.message import EmailMessage
     import uuid
 
-    msg = MIMEMultipart("alternative")
+    msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = f"{smtp_cfg.from_name} <{smtp_cfg.from_address}>"
     msg["To"] = to_addr
     msg_id = f"<{uuid.uuid4()}@lcca-ias>"
     msg["Message-ID"] = msg_id
-    if body_text:
-        msg.attach(MIMEText(body_text, "plain"))
-    msg.attach(MIMEText(body_html, "html"))
+    msg.set_content(body_text or body_html.replace("<br>", "\n"))
+    msg.add_alternative(body_html, subtype="html")
+
+    if attachment_bytes:
+        msg.add_attachment(
+            attachment_bytes,
+            maintype="application",
+            subtype="pdf",
+            filename=attachment_filename or "Invoice.pdf",
+        )
 
     await aiosmtplib.send(
         msg,
@@ -107,7 +125,15 @@ async def send_invoice_email(
         try:
             # Hard timeout so a blocked SMTP never stalls the event loop
             smtp_msg_id = await asyncio.wait_for(
-                _send_via_smtp(smtp_cfg, recipient_email, subject, body_html, body_text),
+                _send_via_smtp(
+                    smtp_cfg,
+                    recipient_email,
+                    subject,
+                    body_html,
+                    body_text,
+                    attachment_bytes=pdf_bytes,
+                    attachment_filename=f"Invoice_{invoice.invoice_number}.pdf",
+                ),
                 timeout=10.0,
             )
             status = "Sent"
