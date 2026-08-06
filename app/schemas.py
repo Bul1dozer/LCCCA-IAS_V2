@@ -125,7 +125,6 @@ class FeeStructureBase(BaseModel):
     term: str
     tuition_fee: Decimal = Decimal("0.00")
     development_fee: Decimal = Decimal("0.00")
-    hostel_fee: Decimal = Decimal("0.00")
     transport_fee: Decimal = Decimal("0.00")
     misc_charges: Decimal = Decimal("0.00")
 

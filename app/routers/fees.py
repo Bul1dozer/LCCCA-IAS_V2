@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/fee-structures", tags=["Fee Structures"], depend
 
 def _calc_total(payload) -> Decimal:
     return (
-        payload.tuition_fee + payload.development_fee + payload.hostel_fee
+        payload.tuition_fee + payload.development_fee
         + payload.transport_fee + payload.misc_charges
     ).quantize(Decimal("0.01"))
 

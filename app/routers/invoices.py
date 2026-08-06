@@ -172,8 +172,7 @@ def generate_invoice(payload: schemas.GenerateInvoiceRequest,
         db.add(invoice)
         db.flush()
         for desc, amt in [("Tuition Fee", fs.tuition_fee), ("Development Fee", fs.development_fee),
-                          ("Hostel Fee", fs.hostel_fee), ("Transport Fee", fs.transport_fee),
-                          ("Miscellaneous", fs.misc_charges)]:
+                          ("Transport Fee", fs.transport_fee), ("Miscellaneous", fs.misc_charges)]:
             a = quantize(amt) if amt else Decimal("0.00")
             if a > 0:
                 db.add(models.InvoiceItem(

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Fee Structures{% endblock %}
 {% block page_title %}Fee Structures{% endblock %}
-{% block page_sub %}Define tuition, development, hostel, transport, and misc charges{% endblock %}
+{% block page_sub %}Define tuition, development, transport, and misc charges{% endblock %}
 {% block topbar_actions %}
 <button class="btn-lcca btn-lcca-gold" onclick="openCreateFee()">
   <i class="bi bi-plus-lg"></i> Add Fee Structure
@@ -20,7 +20,6 @@
             <th>Term</th>
             <th>Tuition</th>
             <th>Development</th>
-            <th>Hostel</th>
             <th>Transport</th>
             <th>Misc</th>
             <th>Total</th>
@@ -28,7 +27,7 @@
           </tr>
         </thead>
         <tbody id="feesTableBody">
-          <tr><td colspan="10"><div class="skeleton" style="height:40px;"></div></td></tr>
+          <tr><td colspan="9"><div class="skeleton" style="height:40px;"></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -71,15 +70,9 @@
               <input type="number" step="0.01" min="0" class="form-control fee-input" id="developmentFee" value="0" required>
             </div>
           </div>
-          <div class="row g-2 mb-2">
-            <div class="col-6">
-              <label class="form-label">Hostel Fee (N$)</label>
-              <input type="number" step="0.01" min="0" class="form-control fee-input" id="hostelFee" value="0" required>
-            </div>
-            <div class="col-6">
-              <label class="form-label">Transport Fee (N$)</label>
-              <input type="number" step="0.01" min="0" class="form-control fee-input" id="transportFee" value="0" required>
-            </div>
+          <div class="mb-2">
+            <label class="form-label">Transport Fee (N$)</label>
+            <input type="number" step="0.01" min="0" class="form-control fee-input" id="transportFee" value="0" required>
           </div>
           <div class="mb-3">
             <label class="form-label">Miscellaneous Charges (N$)</label>
@@ -125,7 +118,7 @@ const feeModal = new bootstrap.Modal(document.getElementById("feeModal"));
 const deleteFeeModal = new bootstrap.Modal(document.getElementById("deleteFeeModal"));
 
 function recalcFeeTotal() {
-  const ids = ["tuitionFee", "developmentFee", "hostelFee", "transportFee", "miscCharges"];
+  const ids = ["tuitionFee", "developmentFee", "transportFee", "miscCharges"];
   const total = ids.reduce((sum, id) => sum + (parseFloat(document.getElementById(id).value) || 0), 0);
   document.getElementById("feeTotalDisplay").textContent = LCCA.currency(total);
 }
@@ -150,7 +143,6 @@ function renderFeesTable(fees) {
       <td class="cell-muted">${LCCA.escapeHtml(f.term)}</td>
       <td>${LCCA.currency(f.tuition_fee)}</td>
       <td>${LCCA.currency(f.development_fee)}</td>
-      <td>${LCCA.currency(f.hostel_fee)}</td>
       <td>${LCCA.currency(f.transport_fee)}</td>
       <td>${LCCA.currency(f.misc_charges)}</td>
       <td class="cell-strong">${LCCA.currency(f.total)}</td>
@@ -188,7 +180,6 @@ function openEditFee(id) {
   document.getElementById("feeTerm").value = fee.term;
   document.getElementById("tuitionFee").value = fee.tuition_fee;
   document.getElementById("developmentFee").value = fee.development_fee;
-  document.getElementById("hostelFee").value = fee.hostel_fee;
   document.getElementById("transportFee").value = fee.transport_fee;
   document.getElementById("miscCharges").value = fee.misc_charges;
   document.getElementById("feeModalTitle").textContent = "Edit Fee Structure";
@@ -205,7 +196,6 @@ document.getElementById("feeForm").addEventListener("submit", async (e) => {
     term: document.getElementById("feeTerm").value.trim(),
     tuition_fee: parseFloat(document.getElementById("tuitionFee").value) || 0,
     development_fee: parseFloat(document.getElementById("developmentFee").value) || 0,
-    hostel_fee: parseFloat(document.getElementById("hostelFee").value) || 0,
     transport_fee: parseFloat(document.getElementById("transportFee").value) || 0,
     misc_charges: parseFloat(document.getElementById("miscCharges").value) || 0,
   };
