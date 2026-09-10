@@ -8,7 +8,7 @@ python-multipart==0.0.32
 
 # PDF generation
 reportlab==4.4.10
-pillow==12.1.1
+pillow==12.3.0
 
 # Email delivery (async SMTP)
 aiosmtplib==5.1.2
