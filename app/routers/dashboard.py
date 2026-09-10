@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -10,6 +10,16 @@ from ..ledger import quantize, reconcile_check
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"],
                    dependencies=[Depends(auth.require_admin)])
+
+
+def _utc_timestamp(value):
+    if not value:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat().replace("+00:00", "Z")
 
 
 @router.get("/stats", response_model=schemas.DashboardStats)
@@ -60,14 +70,14 @@ def activity(limit: int = 12, db: Session = Depends(get_db)):
             detail += f" #{audit.resource_id}"
         items.append({
             "description": audit.detail or detail,
-            "timestamp": audit.created_at,
+            "timestamp": _utc_timestamp(audit.created_at),
             "icon": "shield-check",
         })
 
     for invoice in db.query(models.Invoice).order_by(models.Invoice.created_at.desc()).limit(limit).all():
         items.append({
             "description": f"Invoice {invoice.invoice_number} generated",
-            "timestamp": invoice.created_at,
+            "timestamp": _utc_timestamp(invoice.created_at),
             "icon": "file-earmark-text",
         })
 
@@ -75,18 +85,18 @@ def activity(limit: int = 12, db: Session = Depends(get_db)):
         learner = payment.learner.full_name if payment.learner else "learner"
         items.append({
             "description": f"Payment of N${quantize(payment.amount_paid)} recorded for {learner}",
-            "timestamp": payment.created_at,
+            "timestamp": _utc_timestamp(payment.created_at),
             "icon": "cash-coin",
         })
 
     for learner in db.query(models.Learner).order_by(models.Learner.created_at.desc()).limit(limit).all():
         items.append({
             "description": f"Learner {learner.full_name} added",
-            "timestamp": learner.created_at,
+            "timestamp": _utc_timestamp(learner.created_at),
             "icon": "person-plus",
         })
 
-    items.sort(key=lambda item: item["timestamp"] or datetime.min, reverse=True)
+    items.sort(key=lambda item: item["timestamp"] or "", reverse=True)
     return items[: max(1, min(limit, 50))]
 
 

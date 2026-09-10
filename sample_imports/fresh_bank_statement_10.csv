@@ -1,0 +1,12 @@
+date,description,amount,reference
+2026-08-05,LCCCA school fee payment Amelia Amunyela,1838.00,FRESH-EFT-1001
+2026-08-05,LCCCA card payment Ben Nambahu,1475.00,FRESH-CARD-1002
+2026-08-05,LCCCA cash deposit Carla Shivute,1888.00,FRESH-CASH-1003
+2026-08-06,LCCCA mobile money David Kauandenge,1888.00,FRESH-MOMO-1004
+2026-08-06,LCCCA school fee payment Elise Gertze,1888.00,FRESH-EFT-1005
+2026-08-06,LCCCA card payment Fillemon Amadhila,1888.00,FRESH-CARD-1006
+2026-08-07,LCCCA cash deposit Grace Nekomba,1888.00,FRESH-CASH-1007
+2026-08-07,LCCCA school fee payment Hosea Witbooi,2750.00,FRESH-EFT-1008
+2026-08-07,LCCCA mobile money Ingrid Titus,2750.00,FRESH-MOMO-1009
+2026-08-08,LCCCA school fee payment Johannes Uushona,2750.00,FRESH-EFT-1010
+2026-08-08,Unmatched test deposit for investigation,999.99,FRESH-UNMATCHED-9999

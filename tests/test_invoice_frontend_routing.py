@@ -122,6 +122,14 @@ def test_invoice_table_uses_parent_and_legacy_fallback_display_helpers():
     assert "inv.learner_name || \"-\"" in INVOICES_TEMPLATE
 
 
+def test_invoice_table_uses_signed_balance_state_helper():
+    assert "function balanceCell(balance)" in INVOICES_TEMPLATE
+    assert "LCCA.balanceDisplay(balance)" in INVOICES_TEMPLATE
+    assert "balanceCell(inv.outstanding_balance)" in INVOICES_TEMPLATE
+    assert "Credit carried forward" in COMMON_JS
+    assert "Do not pay - credit applied" in COMMON_JS
+
+
 def test_api_validation_errors_are_formatted_for_people():
     assert "function formatApiErrorDetail(detail)" in COMMON_JS
     assert 'item.loc.filter((part) => part !== "body").join(".")' in COMMON_JS

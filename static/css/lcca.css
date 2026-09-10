@@ -39,7 +39,7 @@
   --info-bg: #eaf2fb;
 
   /* ---- Type ---- */
-  --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-display: 'Source Serif 4', Georgia, 'Visby', serif;
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
 
@@ -119,7 +119,7 @@ a:hover { color: var(--navy-900); }
 
 .auth-art .quote { z-index: 1; max-width: 420px; }
 .auth-art .quote blockquote {
-  font-family: var(--font-display);
+  font-family: 'VisbyCF-DemiBoldOblique', 'Visby', var(--font-body);
   font-size: 1.6rem;
   line-height: 1.4;
   margin: 0 0 12px;
@@ -516,3 +516,5 @@ a:hover { color: var(--navy-900); }
 }
 .balance-pill.zero { background: var(--success-bg); color: var(--success); }
 .balance-pill.positive { background: var(--warning-bg); color: var(--warning); }
+.balance-pill.credit { background: var(--info-bg); color: var(--info); }
+.balance-pill .balance-pill-label { font-weight: 600; opacity: 0.82; }

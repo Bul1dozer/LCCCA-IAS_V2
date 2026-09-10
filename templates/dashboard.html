@@ -23,10 +23,10 @@
   </div>
   <div class="col-6 col-lg-3">
     <div class="kpi-card">
-      <div class="kpi-icon red"><i class="bi bi-exclamation-circle-fill"></i></div>
-      <div class="kpi-label">Outstanding Balance</div>
+      <div class="kpi-icon red" id="kpiOutstandingIcon"><i class="bi bi-exclamation-circle-fill"></i></div>
+      <div class="kpi-label" id="kpiOutstandingLabel">Outstanding Balance</div>
       <div class="kpi-value" id="kpiOutstanding">&mdash;</div>
-      <div class="kpi-trend text-muted">Across all learners</div>
+      <div class="kpi-trend text-muted" id="kpiOutstandingSub">Across all learners</div>
     </div>
   </div>
   <div class="col-6 col-lg-3">
@@ -120,7 +120,21 @@ async function loadDashboard() {
     document.getElementById("kpiLearners").textContent = stats.total_learners;
     document.getElementById("kpiLearnersSub").textContent = `${stats.active_learners} active`;
     document.getElementById("kpiParents").textContent = stats.total_parents;
-    document.getElementById("kpiOutstanding").textContent = LCCA.currency(stats.total_outstanding_balance);
+    const outstanding = LCCA.balanceDisplay(stats.total_outstanding_balance);
+    document.getElementById("kpiOutstanding").textContent = outstanding.amount;
+    document.getElementById("kpiOutstandingLabel").textContent =
+      outstanding.state === "credit" ? "Net Credit Balance" :
+      outstanding.state === "settled" ? "Accounts Settled" : "Net Amount Due";
+    document.getElementById("kpiOutstandingSub").textContent =
+      outstanding.state === "credit" ? "Do not pay - credit carried forward" :
+      outstanding.state === "settled" ? "No payment required across learners" :
+      "Payment required across learners";
+    document.getElementById("kpiOutstandingIcon").className =
+      `kpi-icon ${outstanding.state === "credit" ? "blue" : outstanding.state === "settled" ? "green" : "red"}`;
+    document.querySelector("#kpiOutstandingIcon i").className = `bi ${
+      outstanding.state === "credit" ? "bi-patch-check-fill" :
+      outstanding.state === "settled" ? "bi-check-circle-fill" : "bi-exclamation-circle-fill"
+    }`;
     document.getElementById("kpiPayments").textContent = LCCA.currency(stats.total_payments_received);
     document.getElementById("kpiCollectionRate").textContent = `${stats.collection_rate}% collection rate`;
     document.getElementById("kpiInvoicesGenerated").textContent = stats.invoices_generated;

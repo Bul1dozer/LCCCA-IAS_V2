@@ -75,6 +75,23 @@ def test_login_rate_limit_locks_repeated_failed_attempts(db_session):
     assert response.json()["detail"] == "Too many attempts. Try again later."
 
 
+def test_principal_and_ops_manager_roles_are_recognized_as_privileged(db_session):
+    from app import auth, models
+
+    principal = _create_user(db_session, username=_unique("principal"), role="Principal")
+    ops = _create_user(db_session, username=_unique("ops"), role="Operations Manager")
+
+    assert auth._role_grants_admin(principal, db_session) is True
+    assert auth._role_grants_admin(ops, db_session) is True
+
+    db_session.add(models.Role(name="Principal", permissions="admin"))
+    db_session.add(models.Role(name="Operations Manager", permissions="admin"))
+    db_session.commit()
+
+    assert auth._role_grants_admin(principal, db_session) is True
+    assert auth._role_grants_admin(ops, db_session) is True
+
+
 def test_totp_login_requires_second_factor_before_session_is_authenticated(db_session):
     from app import models
 

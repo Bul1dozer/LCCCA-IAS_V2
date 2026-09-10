@@ -1,0 +1,11 @@
+learner_code,full_name,grade,class_name,date_of_admission,date_of_birth,id_number,physical_address,status
+FRESH1001,Amelia Amunyela,Baby Class,Baby Class A,2026-01-15,2022-04-12,MOCK-FRESH-1001,"Erf 1201, Invokavit Street, Gemeente 1, Katutura, Windhoek, Namibia",Active
+FRESH1002,Ben Nambahu,Toddler Class,Toddler Class A,2026-01-15,2021-09-20,MOCK-FRESH-1002,"Erf 1202, Gemeente Road, Katutura, Windhoek, Namibia",Active
+FRESH1003,Carla Shivute,Grade 0,Grade 0 A,2026-01-15,2020-02-03,MOCK-FRESH-1003,"Erf 1203, Mandume Avenue, Windhoek, Namibia",Active
+FRESH1004,David Kauandenge,Grade 1,Grade 1 A,2026-01-15,2019-08-14,MOCK-FRESH-1004,"Erf 1204, Ongava Close, Windhoek, Namibia",Active
+FRESH1005,Elise Gertze,Grade 3,Grade 3 A,2026-01-15,2017-11-30,MOCK-FRESH-1005,"Erf 1205, Independence Street, Windhoek, Namibia",Active
+FRESH1006,Fillemon Amadhila,Grade 5,Grade 5 B,2026-01-15,2015-06-18,MOCK-FRESH-1006,"Erf 1206, Test Street, Khomasdal, Windhoek, Namibia",Active
+FRESH1007,Grace Nekomba,Grade 7,Grade 7 A,2026-01-15,2013-03-09,MOCK-FRESH-1007,"Erf 1207, Invokavit Street, Katutura, Windhoek, Namibia",Active
+FRESH1008,Hosea Witbooi,Grade 8,Grade 8 A,2026-01-15,2012-10-26,MOCK-FRESH-1008,"Erf 1208, Gemeente Road, Katutura, Windhoek, Namibia",Active
+FRESH1009,Ingrid Titus,Grade 9,Grade 9 B,2026-01-15,2011-07-05,MOCK-FRESH-1009,"Erf 1209, Mandume Avenue, Windhoek, Namibia",Active
+FRESH1010,Johannes Uushona,Grade 10,Grade 10 A,2026-01-15,2010-01-22,MOCK-FRESH-1010,"Erf 1210, Ongava Close, Windhoek, Namibia",Active

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -148,6 +148,29 @@ def test_payment_receipt_pdf_and_dropdown_text(db_session):
         create_block = payment_template.split("async function openCreatePayment()", 1)[1].split("paymentModal.show()", 1)[0]
         assert "learner_code" in create_block
         assert "Bal:" not in create_block
+    finally:
+        _clear_overrides(app)
+
+
+def test_dashboard_activity_timestamps_are_explicit_utc(db_session):
+    from app import models
+
+    app, client = _client(db_session)
+    try:
+        db_session.add(models.AuditLog(
+            username="workflow-admin",
+            action="CREATE",
+            resource_type="Learner",
+            resource_id="123",
+            detail="Created learner",
+            created_at=datetime(2026, 8, 8, 3, 1, 21),
+        ))
+        db_session.commit()
+
+        response = client.get("/api/dashboard/activity?limit=1")
+        assert response.status_code == 200, response.text
+        activity = response.json()
+        assert activity[0]["timestamp"] == "2026-08-08T03:01:21Z"
     finally:
         _clear_overrides(app)
 

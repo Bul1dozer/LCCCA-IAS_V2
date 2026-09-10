@@ -79,6 +79,38 @@ const LCCA = (() => {
     return "N$ " + n.toLocaleString("en-NA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  function balanceDisplay(value) {
+    const n = Number(value || 0);
+    if (n > 0) {
+      return {
+        state: "debit",
+        css: "positive",
+        icon: "bi-exclamation-circle",
+        label: "Payment due",
+        amount: currency(n),
+        action: "Payment required",
+      };
+    }
+    if (n < 0) {
+      return {
+        state: "credit",
+        css: "credit",
+        icon: "bi-patch-check",
+        label: "Credit carried forward",
+        amount: currency(Math.abs(n)),
+        action: "Do not pay - credit applied",
+      };
+    }
+    return {
+      state: "settled",
+      css: "zero",
+      icon: "bi-check-circle",
+      label: "Account settled",
+      amount: currency(0),
+      action: "No payment required",
+    };
+  }
+
   function dateShort(value) {
     if (!value) return "-";
     const d = new Date(value + (typeof value === "string" && value.length === 10 ? "T00:00:00" : ""));
@@ -226,5 +258,5 @@ const LCCA = (() => {
     initLogout();
   });
 
-  return { api, currency, dateShort, dateTimeShort, timeAgo, escapeHtml, initials, toast, debounce, formatApiErrorDetail };
+  return { api, currency, balanceDisplay, dateShort, dateTimeShort, timeAgo, escapeHtml, initials, toast, debounce, formatApiErrorDetail };
 })();

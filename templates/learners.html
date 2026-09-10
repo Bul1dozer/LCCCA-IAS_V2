@@ -154,9 +154,12 @@ function statusBadge(status) {
 }
 
 function balancePill(balance) {
-  const cls = balance > 0 ? "positive" : "zero";
-  const icon = balance > 0 ? "bi-exclamation-circle" : "bi-check-circle";
-  return `<span class="balance-pill ${cls}"><i class="bi ${icon}"></i> ${LCCA.currency(balance)}</span>`;
+  const display = LCCA.balanceDisplay(balance);
+  return `<span class="balance-pill ${display.css}" title="${LCCA.escapeHtml(display.action)}">
+    <i class="bi ${display.icon}"></i>
+    <span>${display.amount}</span>
+    <span class="balance-pill-label">${LCCA.escapeHtml(display.label)}</span>
+  </span>`;
 }
 
 function renderLearnersTable(learners) {

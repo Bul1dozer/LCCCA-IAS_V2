@@ -13,6 +13,31 @@ router = APIRouter(prefix="/api/settings", tags=["Settings"], dependencies=[Depe
 
 # ---- SMTP ----
 
+def _clean_smtp_payload(payload: dict) -> dict:
+    host = str(payload.get("host", "")).strip().lower()
+    if "@" in host:
+        raise HTTPException(
+            400,
+            "SMTP host must be a server name such as smtp.gmail.com, not an email address.",
+        )
+    if not host:
+        raise HTTPException(400, "SMTP host is required.")
+
+    password = payload.get("password")
+    if password:
+        password = "".join(str(password).split())
+
+    return {
+        "name": str(payload.get("name") or "Default SMTP").strip(),
+        "host": host,
+        "port": int(payload.get("port", 587)),
+        "username": str(payload.get("username") or "").strip(),
+        "password": password,
+        "use_tls": bool(payload.get("use_tls", True)),
+        "from_address": str(payload.get("from_address") or "").strip(),
+        "from_name": str(payload.get("from_name") or "LCCA Accounts").strip(),
+    }
+
 @router.get("/smtp")
 def get_smtp(db: Session = Depends(get_db)):
     cfg = db.query(models.SmtpConfig).filter(models.SmtpConfig.is_active == True).first()
@@ -27,27 +52,28 @@ def get_smtp(db: Session = Depends(get_db)):
 
 @router.post("/smtp")
 def save_smtp(payload: dict, request: Request, db: Session = Depends(get_db)):
+    cleaned = _clean_smtp_payload(payload)
     cfg = db.query(models.SmtpConfig).first()
     if cfg:
-        cfg.name = payload.get("name", "Default SMTP")
-        cfg.host = payload["host"]
-        cfg.port = int(payload.get("port", 587))
-        cfg.username = payload.get("username")
-        cfg.use_tls = bool(payload.get("use_tls", True))
-        cfg.from_address = payload.get("from_address")
-        cfg.from_name = payload.get("from_name", "LCCA Accounts")
+        cfg.name = cleaned["name"]
+        cfg.host = cleaned["host"]
+        cfg.port = cleaned["port"]
+        cfg.username = cleaned["username"]
+        cfg.use_tls = cleaned["use_tls"]
+        cfg.from_address = cleaned["from_address"]
+        cfg.from_name = cleaned["from_name"]
         cfg.is_active = True
-        if payload.get("password"):
-            cfg.password_encrypted = payload["password"]
+        if cleaned["password"]:
+            cfg.password_encrypted = cleaned["password"]
     else:
         cfg = models.SmtpConfig(
-            name=payload.get("name", "Default SMTP"),
-            host=payload["host"], port=int(payload.get("port", 587)),
-            username=payload.get("username"),
-            password_encrypted=payload.get("password"),
-            use_tls=bool(payload.get("use_tls", True)),
-            from_address=payload.get("from_address"),
-            from_name=payload.get("from_name", "LCCA Accounts"),
+            name=cleaned["name"],
+            host=cleaned["host"], port=cleaned["port"],
+            username=cleaned["username"],
+            password_encrypted=cleaned["password"],
+            use_tls=cleaned["use_tls"],
+            from_address=cleaned["from_address"],
+            from_name=cleaned["from_name"],
             is_active=True,
         )
         db.add(cfg)
@@ -58,7 +84,7 @@ def save_smtp(payload: dict, request: Request, db: Session = Depends(get_db)):
 
 @router.post("/smtp/test")
 async def test_smtp(request: Request, db: Session = Depends(get_db)):
-    from ..email_engine import _get_active_smtp, _send_real
+    from ..email_engine import _get_active_smtp, _send_via_smtp
     cfg = _get_active_smtp(db)
     if not cfg:
         raise HTTPException(400, "No SMTP configuration found. Save settings first.")
@@ -68,9 +94,13 @@ async def test_smtp(request: Request, db: Session = Depends(get_db)):
     if not to_addr:
         raise HTTPException(400, "No recipient address available for test email.")
     try:
-        msg_id = await _send_real(cfg, to_addr, "LCCA-IAS SMTP Test",
-                                  "<p>SMTP is configured correctly for LCCA-IAS.</p>",
-                                  "SMTP is configured correctly for LCCA-IAS.")
+        msg_id = await _send_via_smtp(
+            cfg,
+            to_addr,
+            "LCCA-IAS SMTP Test",
+            "<p>SMTP is configured correctly for LCCA-IAS.</p>",
+            "SMTP is configured correctly for LCCA-IAS.",
+        )
         return {"success": True, "message_id": msg_id, "sent_to": to_addr}
     except Exception as e:
         raise HTTPException(500, f"SMTP test failed: {e}")

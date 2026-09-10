@@ -25,10 +25,10 @@
         <div class="panel-header"><h3>SMTP Configuration</h3>
           <div id="smtpStatusBadge"></div>
         </div>
-        <form id="smtpForm" class="panel-body">
+        <form id="smtpForm" class="panel-body" autocomplete="off">
           <div class="row g-3 mb-3">
             <div class="col-8"><label class="form-label">SMTP Host</label>
-              <input type="text" class="form-control" id="smtpHost" placeholder="smtp.gmail.com">
+              <input type="text" class="form-control" id="smtpHost" placeholder="smtp.gmail.com" autocomplete="off">
             </div>
             <div class="col-4"><label class="form-label">Port</label>
               <input type="number" class="form-control" id="smtpPort" value="587">
@@ -36,15 +36,15 @@
           </div>
           <div class="row g-3 mb-3">
             <div class="col-6"><label class="form-label">Username / Email</label>
-              <input type="text" class="form-control" id="smtpUsername" placeholder="accounts@yourschool.com">
+              <input type="text" class="form-control" id="smtpUsername" placeholder="accounts@yourschool.com" autocomplete="off">
             </div>
             <div class="col-6"><label class="form-label">App Password</label>
-              <input type="password" class="form-control" id="smtpPassword" placeholder="Leave blank to keep existing">
+              <input type="password" class="form-control" id="smtpPassword" placeholder="Leave blank to keep existing" autocomplete="new-password">
             </div>
           </div>
           <div class="row g-3 mb-3">
             <div class="col-6"><label class="form-label">From Address</label>
-              <input type="email" class="form-control" id="smtpFromAddress" placeholder="accounts@yourschool.com">
+              <input type="email" class="form-control" id="smtpFromAddress" placeholder="accounts@yourschool.com" autocomplete="off">
             </div>
             <div class="col-6"><label class="form-label">From Name</label>
               <input type="text" class="form-control" id="smtpFromName" placeholder="LCCA Accounts Office">

@@ -66,24 +66,6 @@ def post_payment(db, learner_id, payment_id, amount, payment_date, created_by="s
     sync_balance_cache(learner_id, db)
     return entry
 
-def post_adjustment(db, learner_id, amount, dc_indicator, transaction_date, created_by="system", notes=None):
-    amount = quantize(amount)
-    dc_indicator = (dc_indicator or "").upper()
-    if amount <= 0:
-        raise ValueError(f"Adjustment amount must be positive, got {amount}")
-    if dc_indicator not in {"DR", "CR"}:
-        raise ValueError(f"Adjustment dc_indicator must be DR or CR, got {dc_indicator}")
-    entry = models.LedgerEntry(
-        learner_id=learner_id, transaction_type="adjustment",
-        reference_type="Adjustment", reference_id=None,
-        amount=amount, dc_indicator=dc_indicator, transaction_date=transaction_date,
-        created_by=created_by, notes=notes or "Manual adjustment",
-    )
-    db.add(entry)
-    db.flush()
-    sync_balance_cache(learner_id, db)
-    return entry
-
 def void_invoice_entries(db, invoice_id, voided_by, void_reason=None):
     now = datetime.utcnow()
     entries = db.query(models.LedgerEntry).filter(

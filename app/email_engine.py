@@ -24,6 +24,43 @@ def _get_active_smtp(db: "Session"):
     return db.query(models.SmtpConfig).filter(models.SmtpConfig.is_active == True).first()
 
 
+def _parent_salutation(parent) -> str:
+    if not parent:
+        return "Parent/Guardian"
+
+    relationship_types = [
+        str(getattr(rel, "relationship_type", "") or "").strip().lower()
+        for rel in getattr(parent, "relationships_", []) or []
+    ]
+    title = None
+    if any(rel_type in {"father", "dad"} for rel_type in relationship_types):
+        title = "Mr"
+    elif any(rel_type in {"mother", "mom", "mum"} for rel_type in relationship_types):
+        title = "Mrs"
+
+    full_name = str(getattr(parent, "full_name", "") or "").strip()
+    if not title:
+        return full_name or "Parent/Guardian"
+
+    if full_name.lower().startswith(("mr ", "mrs ", "ms ", "miss ", "dr ", "prof ")):
+        return full_name
+    return f"{title} {full_name}" if full_name else title
+
+
+def _email_recipient_parent(parents: list, recipient_email: Optional[str] = None):
+    if not parents:
+        return None
+    if recipient_email:
+        lowered = recipient_email.strip().lower()
+        matched = next(
+            (p for p in parents if str(getattr(p, "email", "") or "").strip().lower() == lowered),
+            None,
+        )
+        if matched:
+            return matched
+    return next((p for p in parents if getattr(p, "email", None)), None) or parents[0]
+
+
 async def _send_via_smtp(
     smtp_cfg,
     to_addr: str,
@@ -86,12 +123,10 @@ async def send_invoice_email(
     real_send = smtp_cfg is not None
 
     recipient_email = recipient_override
-    recipient_name = None
-    if not recipient_email and parents:
-        primary = next((p for p in parents if getattr(p, "email", None)), None)
-        if primary:
-            recipient_email = primary.email
-            recipient_name = primary.full_name
+    recipient_parent = _email_recipient_parent(parents, recipient_email)
+    recipient_name = _parent_salutation(recipient_parent) if recipient_parent else None
+    if not recipient_email and recipient_parent and getattr(recipient_parent, "email", None):
+        recipient_email = recipient_parent.email
     if not recipient_email:
         recipient_email = "no-email-on-file@lcca.edu.na"
 
@@ -174,7 +209,8 @@ async def send_invoice_email(
         sent_at=datetime.utcnow() if status in ("Sent", "Simulated") else None,
     ))
 
-    invoice.status = "Sent"
+    if status in ("Sent", "Simulated"):
+        invoice.status = "Sent"
 
     return {
         "status": status,

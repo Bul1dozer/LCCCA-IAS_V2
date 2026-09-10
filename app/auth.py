@@ -124,9 +124,19 @@ def get_current_user(request: Request, db: Session) -> models.User:
         raise HTTPException(status_code=401, detail="User not found or inactive")
     return user
 
+def _normalized_role_variants(role: str) -> set[str]:
+    raw = (role or "").strip().lower()
+    variants = {raw}
+    if raw == "opereations manager":
+        variants.add("operations manager")
+    return variants
+
+
 def _role_grants_admin(user: models.User, db: Session) -> bool:
     role_name = (user.role or "").strip().lower()
     if role_name in {"administrator", "admin"}:
+        return True
+    if _normalized_role_variants(user.role) & {"principal", "operations manager"}:
         return True
     role = db.query(models.Role).filter(models.Role.name == user.role).first()
     if not role or not role.permissions:
@@ -149,7 +159,8 @@ def require_role(*allowed_roles: str):
     allowed_lower = {r.lower() for r in allowed_roles} | {"administrator"}
     def _dep(request: Request, db: Session = Depends(get_db)) -> models.User:
         user = get_current_user(request, db)
-        if user.role.lower() not in allowed_lower:
+        user_roles = _normalized_role_variants(user.role)
+        if not (user_roles & allowed_lower):
             raise HTTPException(status_code=403,
                 detail=f"Requires one of: {', '.join(sorted(allowed_roles))}")
         return user

@@ -318,7 +318,7 @@ class DashboardStats(BaseModel):
 
 class DashboardActivity(BaseModel):
     description: str
-    timestamp: datetime
+    timestamp: str
     icon: str
 
 class MonthlyCollection(BaseModel):

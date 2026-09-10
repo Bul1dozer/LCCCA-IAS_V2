@@ -175,7 +175,7 @@ function renderInvoicesTable(invoices) {
       <td>${LCCA.currency(inv.current_charges)}</td>
       <td>${LCCA.currency(inv.previous_balance)}</td>
       <td>${LCCA.currency(inv.payments_made)}</td>
-      <td class="cell-strong">${LCCA.currency(inv.outstanding_balance)}</td>
+      <td class="cell-strong">${balanceCell(inv.outstanding_balance)}</td>
       <td><span class="badge-status ${inv.status.toLowerCase()}">${inv.status}</span></td>
       <td style="text-align:right; white-space:nowrap;">
         <button class="btn-lcca btn-lcca-outline btn-lcca-sm btn-icon-only" title="${isExpanded ? "Hide line items" : "Show line items"}" onclick="toggleInvoiceItems(${inv.id})"><i class="bi ${isExpanded ? "bi-chevron-up" : "bi-chevron-down"}"></i></button>
@@ -199,6 +199,15 @@ function linkedLearnerDisplay(inv) {
     return inv.linked_learner_names.join(", ");
   }
   return inv.learner_name || "-";
+}
+
+function balanceCell(balance) {
+  const display = LCCA.balanceDisplay(balance);
+  return `<span class="balance-pill ${display.css}" title="${LCCA.escapeHtml(display.action)}">
+    <i class="bi ${display.icon}"></i>
+    <span>${display.amount}</span>
+    <span class="balance-pill-label">${LCCA.escapeHtml(display.label)}</span>
+  </span>`;
 }
 
 function renderInvoiceItemRow(inv) {
@@ -389,8 +398,13 @@ document.getElementById("sendEmailForm").addEventListener("submit", async (e) =>
   const email = document.getElementById("sendRecipientEmail").value.trim();
   try {
     const log = await LCCA.api.post(`/invoices/${invoiceId}/send`, email ? { recipient_email: email } : {});
-    LCCA.toast(`Invoice email simulated, sent to ${log.recipient_email}`);
-    sendEmailModal.hide();
+    if (log.status === "Failed") {
+      LCCA.toast(`Invoice email failed: ${log.error || "SMTP delivery failed."}`, "error");
+    } else {
+      const mode = log.real_send ? "sent" : "simulated";
+      LCCA.toast(`Invoice email ${mode} for ${log.recipient_email}`);
+      sendEmailModal.hide();
+    }
     loadInvoices();
   } catch (err) {
     LCCA.toast("Failed to send invoice: " + err.message, "error");

@@ -16,7 +16,8 @@ be streamed directly as a FastAPI Response / StreamingResponse.
 import os
 from io import BytesIO
 from datetime import datetime, date
-
+from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -67,10 +68,60 @@ def _currency(value) -> str:
         return "N$ 0.00"
 
 
+def _money(value) -> Decimal:
+    try:
+        return Decimal(str(value or 0))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0.00")
+
+
+def _currency_abs(value) -> str:
+    return _currency(abs(_money(value)))
+
+
 def _fmt_date(d) -> str:
     if isinstance(d, (date, datetime)):
         return d.strftime("%d %b %Y")
     return str(d)
+
+
+def _fmt_due_date(d) -> str:
+    if isinstance(d, (date, datetime)):
+        return d.strftime("%d/%m/%Y")
+    return str(d)
+
+
+def _invoice_balance_presentation(invoice) -> dict:
+    balance = _money(getattr(invoice, "outstanding_balance", 0))
+    if balance > 0:
+        return {
+            "summary_label": "Outstanding Balance Due",
+            "summary_amount": _currency(balance),
+            "notice": f"PAYMENT DUE BY: {_fmt_due_date(invoice.due_date)}",
+            "message": (
+                "Kindly settle the outstanding balance on or before the due date. "
+                "Please use <b>{reference}</b> as your payment reference."
+            ),
+            "background": GOLD,
+        }
+    if balance < 0:
+        return {
+            "summary_label": "Credit Balance Applied",
+            "summary_amount": _currency_abs(balance),
+            "notice": "DO NOT PAY - CREDIT APPLIED",
+            "message": (
+                "Your account is in credit. This amount will be carried forward "
+                "and applied to the next invoice."
+            ),
+            "background": colors.HexColor("#EAF2FB"),
+        }
+    return {
+        "summary_label": "Account Settled",
+        "summary_amount": _currency(0),
+        "notice": "NO PAYMENT REQUIRED",
+        "message": "This account is settled for the current invoice.",
+        "background": colors.HexColor("#E7F6EE"),
+    }
 
 
 def _header_block(report_title: str):
@@ -222,18 +273,19 @@ def build_invoice_pdf(invoice, learner, parents, items) -> bytes:
 
     # Summary table: previous balance, current charges, payments, outstanding
     elements.append(Paragraph("Account Summary", section_style))
+    balance_state = _invoice_balance_presentation(invoice)
     summary_rows = [
         ["Previous Balance Brought Forward", _currency(invoice.previous_balance)],
         ["Current Charges (this invoice)", _currency(invoice.current_charges)],
         ["Payments Made (since last invoice)", f"({_currency(invoice.payments_made)})"],
-        ["Outstanding Balance Due", _currency(invoice.outstanding_balance)],
+        [balance_state["summary_label"], balance_state["summary_amount"]],
     ]
     summary_table = Table(summary_rows, colWidths=[130 * mm, 48 * mm])
     summary_table.setStyle(TableStyle([
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
         ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-        ("BACKGROUND", (0, -1), (-1, -1), GOLD),
+        ("BACKGROUND", (0, -1), (-1, -1), balance_state["background"]),
         ("FONTSIZE", (0, -1), (-1, -1), 11),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
@@ -241,10 +293,10 @@ def build_invoice_pdf(invoice, learner, parents, items) -> bytes:
     elements.append(summary_table)
     elements.append(Spacer(1, 10))
 
+    reference = learner.learner_code if learner else invoice.invoice_number
     elements.append(Paragraph(
-        f"<b>Payment Due Date: {_fmt_date(invoice.due_date)}</b> &mdash; "
-        f"Kindly settle outstanding balances on or before the due date. "
-        f"Please use <b>{learner.learner_code if learner else invoice.invoice_number}</b> as your payment reference.",
+        f"<b>{balance_state['notice']}</b> &mdash; "
+        f"{balance_state['message'].format(reference=reference)}",
         normal_style,
     ))
 
@@ -430,18 +482,27 @@ def build_statement_pdf(learner, invoices, payments) -> bytes:
             "debit": 0,
             "credit": p.amount_paid,
         })
+    
     ledger.sort(key=lambda x: x["date"])
 
     elements.append(Paragraph("Transaction History", section_style))
     table_rows = [["Date", "Description", "Charges (Debit)", "Payments (Credit)"]]
-    running = 0.0
+
+    running = Decimal("0.00")
+
     for entry in ledger:
-        running += entry["debit"] - entry["credit"]
+        debit = Decimal(str(entry.get("debit") or "0"))
+        credit = Decimal(str(entry.get("credit") or "0"))
+
+        running += debit - credit
+
         table_rows.append([
-            _fmt_date(entry["date"]), entry["desc"],
-            _currency(entry["debit"]) if entry["debit"] else "-",
-            _currency(entry["credit"]) if entry["credit"] else "-",
+            _fmt_date(entry["date"]),
+            entry["desc"],
+            _currency(debit) if debit else "-",
+            _currency(credit) if credit else "-",
         ])
+
     if not ledger:
         table_rows.append(["-", "No transactions recorded yet.", "-", "-"])
 

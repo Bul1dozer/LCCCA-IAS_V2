@@ -1,7 +1,7 @@
 """LCCA-IAS v4 — FastAPI application entry point."""
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -109,6 +109,16 @@ async def csrf_middleware(request: Request, call_next):
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse("static/img/favicon.ico", media_type="image/x-icon")
+
+
+@app.get("/site.webmanifest", include_in_schema=False)
+def site_webmanifest():
+    return FileResponse("static/img/site.webmanifest", media_type="application/manifest+json")
 
 
 # API routers

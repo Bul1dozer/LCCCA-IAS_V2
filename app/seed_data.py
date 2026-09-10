@@ -10,17 +10,40 @@ def seed(db: Session):
     if db.query(models.User).count() > 0:
         return
 
-    # Admin user
+    db.add(models.Role(name="Admin", description="Full system access", permissions="admin"))
+    db.add(models.Role(name="Principal", description="Leadership access", permissions="admin"))
+    db.add(models.Role(name="Operations Manager", description="Operations access", permissions="admin"))
+
+    # Default login users
     admin = models.User(
         username="admin",
         password_hash=auth.hash_password("admin123"),
         full_name="System Administrator",
         email="admin@lcca.na",
-        role="Administrator",
+        role="Admin",
         is_active=True,
     )
     db.add(admin)
 
+    principal = models.User(
+        username="principal",
+        password_hash=auth.hash_password("principal123"),
+        full_name="School Principal",
+        email="principal@lcca.na",
+        role="Principal",
+        is_active=True,
+    )
+    db.add(principal)
+
+    ops = models.User(
+        username="opsmanager",
+        password_hash=auth.hash_password("ops123"),
+        full_name="Operations Manager",
+        email="ops@lcca.na",
+        role="Operations Manager",
+        is_active=True,
+    )
+    db.add(ops)
     # Invoice counter
     year = datetime.now().year
     if not db.query(models.InvoiceCounter).first():
